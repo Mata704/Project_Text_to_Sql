@@ -16,3 +16,7 @@ class EmbeddingError(TextToSQLError):
 
 class VectorStoreError(TextToSQLError):
     """Raised when vector documents cannot be stored or retrieved."""
+
+
+class SQLiteDatabaseError(TextToSQLError):
+    """Raised when a SQLite query or write operation fails."""

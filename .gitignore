@@ -5,7 +5,7 @@ __pycache__/
 *.sqlite
 *.sqlite3
 *.db
-!backend/data/comboios.sqlite3
+backend/data/
 backend/data/chroma/
 .pytest_cache/
 .ruff_cache/

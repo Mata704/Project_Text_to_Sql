@@ -5,11 +5,18 @@ from text_to_sql.document_ingestion import DocumentIngestionConfig, DocumentInge
 from text_to_sql.embeddings import EmbeddingConfig
 from text_to_sql.errors import ConfigurationError, TextToSQLError
 from text_to_sql.llms import LLMSelectorService
+from text_to_sql.sample_database import SampleDatabaseService
 
 
 def main() -> int:
     try:
         settings = Settings()
+        database_changed = SampleDatabaseService().ensure_current()
+        if database_changed:
+            print("Base de dados SQLite de demonstração criada ou atualizada.")
+        else:
+            print("Base de dados SQLite de demonstração já está atualizada.")
+
         if (
             settings.openai_api_key is None
             or not settings.openai_api_key.get_secret_value().strip()

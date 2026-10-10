@@ -53,26 +53,41 @@ O schema, a descrição das tabelas e exemplos de consultas estão documentados 
 [`documentation/`](documentation/README.md), preparados para reutilização na
 futura RAG.
 
-Para criar ou atualizar a base de dados de exemplo:
+No arranque da CLI, o [`SampleDatabaseService`](src/text_to_sql/sample_database/sample_database_service.py)
+cria ou atualiza automaticamente a base SQLite de exemplo em `data/`. Compara
+schema e dados; quando a base já corresponde aos dados esperados, não substitui
+nem reescreve o ficheiro. Os nomes e localizações das estações são estações
+reais da rede CP; comboios, horários e registos de atraso são dados sintéticos,
+criados para desenvolvimento e demonstração. A amostra tem 30 comboios, 30
+estações e 3.600 viagens entre 1 de julho e 28 de outubro de 2026; depois de
+10 de outubro, as viagens são marcadas como planeadas.
 
-PowerShell:
+## Serviço SQLite
 
-```powershell
-uv run python scripts\create_sample_database.py
+O [`SQLiteService`](src/text_to_sql/sqlite_db/sqlite_db_service.py) executa
+queries de leitura em modo somente de leitura e oferece métodos de escrita com
+commit/rollback transacional. Use parâmetros SQL (`?` ou parâmetros nomeados)
+em vez de interpolar valores diretamente na query. Por omissão, o serviço usa
+`data/comboios.sqlite3`; não cria uma base vazia automaticamente se o ficheiro
+não existir.
+
+```python
+from text_to_sql.sqlite_db import SQLiteService
+
+database = SQLiteService()
+stations = database.fetch_all(
+    "SELECT nome, cidade FROM estacoes WHERE cidade = ?",
+    ("Lisboa",),
+)
+database.execute(
+    "UPDATE viagens SET estado = ? WHERE id_viagem = ?",
+    ("Realizada", 1),
+)
 ```
 
-Bash:
-
-```bash
-uv run python scripts/create_sample_database.py
-```
-
-O script compara o schema e os dados da base existente com os dados definidos
-no gerador: cria-a se não existir e substitui-a apenas se estiver diferente ou
-inválida. Se estiver igual, mantém o ficheiro sem o reescrever. Os nomes e
-localizações das estações são estações reais da rede CP; comboios, horários e
-registos de atraso são dados sintéticos, criados apenas para desenvolvimento e
-demonstração. As viagens de exemplo cobrem 5 a 14 de outubro de 2026.
+`fetch_one` devolve a primeira linha ou `None`; `execute` devolve o número de
+linhas afetadas e o ID inserido, quando disponível. `execute_many` executa um
+lote numa única transação.
 
 ## Chunking da documentação
 
@@ -265,6 +280,13 @@ src/text_to_sql/
 │   ├── constants.py          # Coleção, métrica e lote predefinidos
 │   ├── chroma_db_model.py    # Configuração e modelo de chunks armazenados
 │   └── chroma_db_service.py  # Persistência e pesquisa na ChromaDB
+├── sqlite_db/
+│   ├── constants.py          # Caminho predefinido da base SQLite
+│   ├── sqlite_db_model.py    # Configuração e resultado de escrita
+│   └── sqlite_db_service.py  # Queries de leitura e escrita transacional
+├── sample_database/
+│   ├── constants.py          # Schema e dados fixos de demonstração
+│   └── sample_database_service.py # Criação e sincronização da base de exemplo
 ├── document_ingestion/
 │   ├── constants.py                 # Caminho predefinido da documentação
 │   ├── document_ingestion_model.py   # Configuração e resultado da ingestão
@@ -276,9 +298,9 @@ src/text_to_sql/
         └── llm_selector_model.py   # Modelos Pydantic usados pelo selector
 ```
 
-O gerador e a base SQLite de exemplo ficam em `scripts/` e `data/`; a SQLite
-ainda não faz parte do caminho de execução. A recuperação RAG, geração SQL,
-consulta SQLite, FastAPI e frontend serão adicionados nas fases seguintes.
+A base SQLite de exemplo fica em `data/` e é sincronizada no arranque da CLI.
+A recuperação RAG, geração SQL, consulta SQLite, FastAPI e frontend serão
+adicionados nas fases seguintes.
 
 O percurso da CLI sincroniza a documentação com a vector store e depois faz a
 classificação com a OpenAI, mantendo o histórico de clarificação em memória.

@@ -16,4 +16,5 @@ Documentação SQLite para a futura RAG.
 - Atrasos de partida e chegada são registos separados.
 - Para calcular atrasos efetivos, filtrar `estado = 'Realizada'`.
 - Dados de viagens e atrasos são sintéticos; estações e localizações são reais.
-- Dados de exemplo: 5 a 14 de outubro de 2026.
+- Dados de exemplo sintéticos: 1 de julho a 28 de outubro de 2026; as viagens
+  posteriores a 10 de outubro estão marcadas como planeadas.
