@@ -68,6 +68,10 @@ def test_classifier_sends_history_and_current_question_without_database_schema()
     assert call["model"] == "test-model"
     assert call["text_format"] is QuestionClassificationResult
     assert "não consultas bases de dados" in call["instructions"]
+    assert "usa normalized_query como resposta final ao utilizador" in call["instructions"]
+    assert (
+        "Sou um assistente especializado em viagens de comboio em Portugal." in call["instructions"]
+    )
     assert call["input"] == [
         {"role": "user", "content": "Qual foi o atraso?"},
         {"role": "assistant", "content": "De que comboio e data?"},
