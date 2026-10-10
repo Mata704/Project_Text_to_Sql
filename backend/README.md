@@ -46,6 +46,9 @@ uv run --project backend pre-commit install
 
 Edite `.env` e preencha `OPENAI_API_KEY`. O repositório inclui uma base de dados
 SQLite de exemplo em `data/comboios.sqlite3` para as próximas fases.
+O schema, a descrição das tabelas e exemplos de consultas estão documentados em
+[`Documentation/`](../Documentation/README.md), preparados para reutilização na
+futura RAG.
 
 Para criar ou atualizar a base de dados de exemplo:
 
