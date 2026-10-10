@@ -120,6 +120,50 @@ class ChromaDBService:
             if chunk_id in documents_by_id
         ]
 
+    def get_all_chunk_ids(self, exclude_ids: set[str] | None = None) -> list[str]:
+        try:
+            result = self.collection.get(include=[])
+        except (ChromaError, ValueError) as error:
+            raise VectorStoreError(f"Could not list chunks in ChromaDB: {error}") from error
+
+        excluded = exclude_ids or set()
+        return [chunk_id for chunk_id in result["ids"] if chunk_id not in excluded]
+
+    def delete_chunks(self, chunk_ids: Sequence[str]) -> int:
+        if not chunk_ids:
+            return 0
+        if any(not chunk_id.strip() for chunk_id in chunk_ids):
+            raise ValueError("Chunk IDs must not be empty.")
+
+        try:
+            self.collection.delete(ids=list(chunk_ids))
+        except (ChromaError, ValueError) as error:
+            raise VectorStoreError(f"Could not delete chunks from ChromaDB: {error}") from error
+        return len(chunk_ids)
+
+    def is_corpus_current(self, fingerprint: str, expected_chunk_count: int) -> bool:
+        if not fingerprint.strip():
+            raise ValueError("The corpus fingerprint cannot be empty.")
+        if expected_chunk_count < 1:
+            raise ValueError("The expected chunk count must be at least 1.")
+        metadata = self.collection.metadata or {}
+        return (
+            metadata.get("corpus_fingerprint") == fingerprint
+            and self.count() == expected_chunk_count
+        )
+
+    def set_corpus_fingerprint(self, fingerprint: str) -> None:
+        if not fingerprint.strip():
+            raise ValueError("The corpus fingerprint cannot be empty.")
+        metadata = self.collection.metadata or {}
+        metadata = {key: value for key, value in metadata.items() if key != "hnsw:space"}
+        try:
+            self.collection.modify(metadata={**metadata, "corpus_fingerprint": fingerprint})
+        except (ChromaError, ValueError) as error:
+            raise VectorStoreError(
+                f"Could not update the ChromaDB corpus fingerprint: {error}"
+            ) from error
+
     def search(
         self,
         query_embedding: Sequence[float],

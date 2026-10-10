@@ -6,7 +6,15 @@ from text_to_sql.cli import main
 
 
 def test_cli_only_constructs_and_calls_selector_service(monkeypatch) -> None:
-    calls: list[tuple[dict[str, str], int]] = []
+    calls: list[tuple[dict[str, str], str]] = []
+
+    class FakeIngestionService:
+        def __init__(self, **kwargs: str) -> None:
+            calls.append((kwargs, "ingestion-init"))
+
+        def run(self):
+            calls.append(({}, "ingestion-run"))
+            return SimpleNamespace(skipped=True, chunk_count=0)
 
     class FakeSelectorService:
         def __init__(self, **kwargs: str) -> None:
@@ -15,6 +23,10 @@ def test_cli_only_constructs_and_calls_selector_service(monkeypatch) -> None:
         def run(self, question: str) -> None:
             calls.append((self.kwargs, question))
 
+    monkeypatch.setattr(
+        "text_to_sql.cli.DocumentIngestionService",
+        FakeIngestionService,
+    )
     monkeypatch.setattr(
         "text_to_sql.cli.Settings",
         lambda: SimpleNamespace(
@@ -30,8 +42,10 @@ def test_cli_only_constructs_and_calls_selector_service(monkeypatch) -> None:
 
     assert main() == 0
     assert calls == [
+        ({"api_key": "test-key"}, "ingestion-init"),
+        ({}, "ingestion-run"),
         (
             {"api_key": "test-key", "model": "test-model"},
             "Quantas viagens?",
-        )
+        ),
     ]

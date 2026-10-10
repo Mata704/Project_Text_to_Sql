@@ -145,6 +145,19 @@ mais próximos, os metadados e a distância. O serviço valida que chunks e
 embeddings correspondem e que a coleção é usada sempre com o mesmo modelo e
 dimensão de embedding.
 
+## Ingestão automática da documentação
+
+Ao iniciar `uv run text-to-sql`, a CLI sincroniza
+[`documentation/`](documentation/README.md) com a ChromaDB antes de pedir a
+pergunta: lê os Markdown, cria chunks, gera embeddings e guarda-os em
+`backend/data/chroma/`.
+
+O serviço [`DocumentIngestionService`](src/text_to_sql/document_ingestion/document_ingestion_service.py)
+calcula um fingerprint da documentação e da configuração do embedding. Se o
+fingerprint não mudou, reutiliza o índice existente sem fazer novas chamadas à
+API de embeddings. Se mudou, atualiza os chunks e remove da coleção os chunks
+que já não existem nos documentos.
+
 ## Executar
 
 PowerShell:
@@ -245,17 +258,18 @@ src/text_to_sql/
 ├── vector_store/
 │   ├── chroma_db_model.py    # Configuração e modelo de chunks armazenados
 │   └── chroma_db_service.py  # Persistência e pesquisa na ChromaDB
+├── document_ingestion/
+│   ├── document_ingestion_model.py   # Configuração e resultado da ingestão
+│   └── document_ingestion_service.py # Pipeline documentação → ChromaDB
 └── llms/
     └── llm_selector/
         ├── llm_selector_service.py # Prompt, chamada OpenAI e fluxo de clarificações
         └── llm_selector_model.py   # Modelos Pydantic usados pelo selector
 ```
 
-O gerador e a base SQLite de exemplo ficam em `scripts/` e `data/` para uso
-posterior; não fazem parte do caminho de execução atual. A integração destes
-serviços com a CLI/RAG, geração SQL, acesso à base de dados, FastAPI e frontend
-será adicionada nas fases seguintes.
+O gerador e a base SQLite de exemplo ficam em `scripts/` e `data/`; a SQLite
+ainda não faz parte do caminho de execução. A recuperação RAG, geração SQL,
+consulta SQLite, FastAPI e frontend serão adicionados nas fases seguintes.
 
-O percurso da CLI faz a classificação com a OpenAI e mantém o histórico de
-clarificação em memória. O serviço de chunking está disponível separadamente,
-mas ainda não faz parte do percurso da CLI.
+O percurso da CLI sincroniza a documentação com a vector store e depois faz a
+classificação com a OpenAI, mantendo o histórico de clarificação em memória.
