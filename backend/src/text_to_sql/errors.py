@@ -12,3 +12,7 @@ class LLMError(TextToSQLError):
 
 class EmbeddingError(TextToSQLError):
     """Raised when text embeddings cannot be created or validated."""
+
+
+class VectorStoreError(TextToSQLError):
+    """Raised when vector documents cannot be stored or retrieved."""

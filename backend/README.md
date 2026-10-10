@@ -78,8 +78,8 @@ O serviço `ChunkingService` divide-os por secções e blocos sem separar tabela
 entre chunks; repete o cabeçalho das tabelas quando necessário, mantém contexto
 dos títulos e aplica overlap entre chunks consecutivos. O tamanho máximo e o
 overlap são configuráveis em caracteres através de `ChunkingConfig`. Cada
-`DocumentChunk` inclui conteúdo, origem, caminho de secção, índice, ID
-determinístico e metadados prontos para futura ingestão vetorial.
+`DocumentChunk` inclui conteúdo, origem, título, caminho de secção, índice e
+total de chunks, intervalo de linhas, contagem de tokens e ID determinístico.
 
 Exemplo de utilização:
 
@@ -91,8 +91,8 @@ from text_to_sql.chunking import ChunkingService
 chunks = ChunkingService().chunk_directory(Path("documentation"))
 ```
 
-O serviço devolve os chunks em memória; a ligação e persistência na ChromaDB
-serão implementadas numa fase posterior.
+O serviço devolve os chunks em memória para serem enviados ao serviço de
+embeddings e depois armazenados na ChromaDB.
 
 ## Embeddings
 
@@ -100,8 +100,7 @@ O serviço [`EmbeddingService`](src/text_to_sql/embeddings/embedding_service.py)
 converte uma lista de textos em vetores usando `text-embedding-3-small` por
 omissão. É independente do chunking e pode ser usado com os conteúdos dos
 chunks ou diretamente com uma pergunta. Os pedidos são enviados em lotes e os
-resultados mantêm a ordem do texto de entrada; não há ligação à ChromaDB nesta
-fase.
+resultados mantêm a ordem do texto de entrada.
 
 ```python
 from text_to_sql.embeddings import EmbeddingService
@@ -114,6 +113,37 @@ query_embedding = embedding_service.embed_texts([question])[0].vector
 Usa a mesma configuração de modelo para os chunks e as perguntas que serão
 comparados. `EmbeddingConfig` permite alterar o modelo, as dimensões e o tamanho
 dos lotes. `TextEmbedding` devolve o texto, o vetor, o modelo e o índice original.
+
+## Vector store (ChromaDB)
+
+O serviço [`ChromaDBService`](src/text_to_sql/vector_store/chroma_db_service.py)
+guarda chunks e embeddings numa coleção Chroma persistente. Por omissão, os
+ficheiros ficam em `backend/data/chroma/`, separados da SQLite. O caminho, nome
+da coleção, métrica de distância e tamanho dos lotes são configuráveis através
+de `ChromaDBConfig`. A coleção usa a métrica cosine e não gera embeddings por si:
+recebe os vetores produzidos pelo `EmbeddingService`.
+
+```python
+from pathlib import Path
+
+from text_to_sql.chunking import ChunkingService
+from text_to_sql.embeddings import EmbeddingService
+from text_to_sql.vector_store import ChromaDBService
+
+chunks = ChunkingService().chunk_directory(Path("documentation"))
+embedding_service = EmbeddingService(api_key="OPENAI_API_KEY")
+chunk_embeddings = embedding_service.embed_texts([chunk.content for chunk in chunks])
+
+vector_store = ChromaDBService()
+vector_store.upsert_chunks(chunks, chunk_embeddings)
+query_vector = embedding_service.embed_texts(["Qual é o schema de viagens?"])[0].vector
+matches = vector_store.search(query_vector, limit=5)
+```
+
+`get_chunks(ids)` lê chunks pelo ID; `search(vector, limit)` devolve os chunks
+mais próximos, os metadados e a distância. O serviço valida que chunks e
+embeddings correspondem e que a coleção é usada sempre com o mesmo modelo e
+dimensão de embedding.
 
 ## Executar
 
@@ -212,6 +242,9 @@ src/text_to_sql/
 ├── embeddings/
 │   ├── embedding_model.py    # Configuração e modelo Pydantic do embedding
 │   └── embedding_service.py  # Criação de embeddings para textos e queries
+├── vector_store/
+│   ├── chroma_db_model.py    # Configuração e modelo de chunks armazenados
+│   └── chroma_db_service.py  # Persistência e pesquisa na ChromaDB
 └── llms/
     └── llm_selector/
         ├── llm_selector_service.py # Prompt, chamada OpenAI e fluxo de clarificações
@@ -219,9 +252,9 @@ src/text_to_sql/
 ```
 
 O gerador e a base SQLite de exemplo ficam em `scripts/` e `data/` para uso
-posterior; não fazem parte do caminho de execução atual. A ingestão na ChromaDB,
-RAG, geração SQL, acesso à base de dados, FastAPI e frontend serão adicionados
-nas fases seguintes.
+posterior; não fazem parte do caminho de execução atual. A integração destes
+serviços com a CLI/RAG, geração SQL, acesso à base de dados, FastAPI e frontend
+será adicionada nas fases seguintes.
 
 O percurso da CLI faz a classificação com a OpenAI e mantém o histórico de
 clarificação em memória. O serviço de chunking está disponível separadamente,
