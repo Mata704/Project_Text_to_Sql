@@ -1,5 +1,0 @@
-{
-  "python.analysis.extraPaths": ["${workspaceFolder}/backend/src"],
-  "python.analysis.include": ["backend/src"],
-  "python.analysis.typeCheckingMode": "strict"
-}

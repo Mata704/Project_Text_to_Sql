@@ -8,3 +8,7 @@ class ConfigurationError(TextToSQLError):
 
 class LLMError(TextToSQLError):
     """Raised when the language model cannot produce a usable result."""
+
+
+class EmbeddingError(TextToSQLError):
+    """Raised when text embeddings cannot be created or validated."""

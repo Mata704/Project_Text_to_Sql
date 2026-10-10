@@ -47,7 +47,7 @@ uv run --project backend pre-commit install
 Edite `.env` e preencha `OPENAI_API_KEY`. O repositório inclui uma base de dados
 SQLite de exemplo em `data/comboios.sqlite3` para as próximas fases.
 O schema, a descrição das tabelas e exemplos de consultas estão documentados em
-[`Documentation/`](../Documentation/README.md), preparados para reutilização na
+[`documentation/`](documentation/README.md), preparados para reutilização na
 futura RAG.
 
 Para criar ou atualizar a base de dados de exemplo:
@@ -70,6 +70,50 @@ inválida. Se estiver igual, mantém o ficheiro sem o reescrever. Os nomes e
 localizações das estações são estações reais da rede CP; comboios, horários e
 registos de atraso são dados sintéticos, criados apenas para desenvolvimento e
 demonstração. As viagens de exemplo cobrem 5 a 14 de outubro de 2026.
+
+## Chunking da documentação
+
+Os documentos Markdown estão em [`documentation/`](documentation/README.md).
+O serviço `ChunkingService` divide-os por secções e blocos sem separar tabelas
+entre chunks; repete o cabeçalho das tabelas quando necessário, mantém contexto
+dos títulos e aplica overlap entre chunks consecutivos. O tamanho máximo e o
+overlap são configuráveis em caracteres através de `ChunkingConfig`. Cada
+`DocumentChunk` inclui conteúdo, origem, caminho de secção, índice, ID
+determinístico e metadados prontos para futura ingestão vetorial.
+
+Exemplo de utilização:
+
+```python
+from pathlib import Path
+
+from text_to_sql.chunking import ChunkingService
+
+chunks = ChunkingService().chunk_directory(Path("documentation"))
+```
+
+O serviço devolve os chunks em memória; a ligação e persistência na ChromaDB
+serão implementadas numa fase posterior.
+
+## Embeddings
+
+O serviço [`EmbeddingService`](src/text_to_sql/embeddings/embedding_service.py)
+converte uma lista de textos em vetores usando `text-embedding-3-small` por
+omissão. É independente do chunking e pode ser usado com os conteúdos dos
+chunks ou diretamente com uma pergunta. Os pedidos são enviados em lotes e os
+resultados mantêm a ordem do texto de entrada; não há ligação à ChromaDB nesta
+fase.
+
+```python
+from text_to_sql.embeddings import EmbeddingService
+
+embedding_service = EmbeddingService(api_key="OPENAI_API_KEY")
+chunk_embeddings = embedding_service.embed_texts([chunk.content for chunk in chunks])
+query_embedding = embedding_service.embed_texts([question])[0].vector
+```
+
+Usa a mesma configuração de modelo para os chunks e as perguntas que serão
+comparados. `EmbeddingConfig` permite alterar o modelo, as dimensões e o tamanho
+dos lotes. `TextEmbedding` devolve o texto, o vetor, o modelo e o índice original.
 
 ## Executar
 
@@ -125,9 +169,6 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-No VS Code, o Pylance verifica o código em `backend/src` em modo estrito. Abra a
-raiz do repositório como workspace para aplicar a configuração em `.vscode/settings.json`.
-
 Para formatar os ficheiros Python com o formatador do Ruff:
 
 PowerShell:
@@ -143,11 +184,8 @@ uv run ruff format .
 ```
 
 O hook de pre-commit executa automaticamente os testes, o Ruff e a verificação
-de formatação em cada commit. O Pylance verifica o código em `backend/src` em
-modo estrito no VS Code; esta verificação não é executada pelo pre-commit. Abra a
-raiz do repositório como workspace para aplicar a configuração em `.vscode/settings.json`.
-Pode executar os hooks manualmente a
-partir da raiz do repositório:
+de formatação em cada commit. Pode executar os hooks manualmente a partir da
+raiz do repositório:
 
 PowerShell:
 
@@ -168,6 +206,12 @@ src/text_to_sql/
 ├── cli.py                    # Entrada interativa e ciclo de clarificação
 ├── config.py                 # Configuração OpenAI
 ├── errors.py                 # Erros de configuração e LLM
+├── chunking/
+│   ├── chunking_model.py     # Configuração e modelo Pydantic do chunk
+│   └── chunking_service.py   # Leitura e divisão de documentos Markdown
+├── embeddings/
+│   ├── embedding_model.py    # Configuração e modelo Pydantic do embedding
+│   └── embedding_service.py  # Criação de embeddings para textos e queries
 └── llms/
     └── llm_selector/
         ├── llm_selector_service.py # Prompt, chamada OpenAI e fluxo de clarificações
@@ -175,8 +219,10 @@ src/text_to_sql/
 ```
 
 O gerador e a base SQLite de exemplo ficam em `scripts/` e `data/` para uso
-posterior; não fazem parte do caminho de execução atual. RAG, geração SQL,
-acesso à base de dados, FastAPI e frontend serão adicionados nas fases seguintes.
+posterior; não fazem parte do caminho de execução atual. A ingestão na ChromaDB,
+RAG, geração SQL, acesso à base de dados, FastAPI e frontend serão adicionados
+nas fases seguintes.
 
-Nesta fase, a aplicação apenas faz a chamada de classificação à OpenAI e mantém
-o histórico de clarificação em memória durante a execução.
+O percurso da CLI faz a classificação com a OpenAI e mantém o histórico de
+clarificação em memória. O serviço de chunking está disponível separadamente,
+mas ainda não faz parte do percurso da CLI.
