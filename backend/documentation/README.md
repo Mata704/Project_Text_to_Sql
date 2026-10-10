@@ -16,5 +16,7 @@ Documentação SQLite para a futura RAG.
 - Atrasos de partida e chegada são registos separados.
 - Para calcular atrasos efetivos, filtrar `estado = 'Realizada'`.
 - Dados de viagens e atrasos são sintéticos; estações e localizações são reais.
-- Dados de exemplo sintéticos: 1 de julho a 28 de outubro de 2026; as viagens
+- Serviços adicionais, horários e atrasos são sintéticos e não representam o
+  horário oficial da CP. A amostra tem 104 serviços diários, 12.480 viagens e
+  19.968 registos de atraso entre 1 de julho e 28 de outubro de 2026; as viagens
   posteriores a 10 de outubro estão marcadas como planeadas.

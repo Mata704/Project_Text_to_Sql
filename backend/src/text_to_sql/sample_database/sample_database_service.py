@@ -1,3 +1,4 @@
+import random
 import sqlite3
 from contextlib import closing
 from datetime import date, datetime, time, timedelta
@@ -10,6 +11,7 @@ from text_to_sql.sample_database.constants import (
     ROUTES,
     SAMPLE_COMPLETED_THROUGH,
     SAMPLE_DATABASE_SCHEMA,
+    SAMPLE_DATABASE_SEED,
     SAMPLE_DAY_COUNT,
     SAMPLE_FIRST_DAY,
     STATIONS,
@@ -89,9 +91,17 @@ class SampleDatabaseService:
                 )
 
                 if status == "Realizada":
-                    departure_delay = (day_offset * 7 + route_index * 5) % 24
-                    arrival_delay = departure_delay + (route_index * 3 + day_offset) % 19
-                    reason = DELAY_REASONS[(day_offset + route_index) % len(DELAY_REASONS)]
+                    generator = random.Random(
+                        SAMPLE_DATABASE_SEED + travel_date.toordinal() * 1_000_003 + trip_id * 97
+                    )
+                    departure_delay = self._sample_delay(generator)
+                    arrival_delay = max(
+                        0,
+                        departure_delay
+                        + self._sample_delay(generator)
+                        - generator.choice((0, 0, 2, 5, 10, 15)),
+                    )
+                    reason = generator.choice(DELAY_REASONS)
                     departure_actual = self._make_datetime(travel_date, departure_time) + timedelta(
                         minutes=departure_delay
                     )
@@ -124,6 +134,13 @@ class SampleDatabaseService:
                 trip_id += 1
 
         return trips, delay_records
+
+    def _sample_delay(self, generator: random.Random) -> int:
+        return generator.choices(
+            (0, 1, 2, 3, 5, 8, 10, 15, 20, 30, 45, 60, 90),
+            weights=(35, 10, 8, 7, 6, 5, 5, 4, 4, 3, 2, 1, 0.1),
+            k=1,
+        )[0]
 
     def _make_datetime(self, travel_date: date, travel_time: time) -> datetime:
         return datetime.combine(travel_date, travel_time)

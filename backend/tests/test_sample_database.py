@@ -5,6 +5,9 @@ from pathlib import Path
 import pytest
 
 from text_to_sql.sample_database import SampleDatabaseService
+from text_to_sql.sample_database.constants import ROUTES, TRAINS
+
+SAMPLE_DAY_COUNT = 120
 
 
 @pytest.fixture
@@ -35,10 +38,11 @@ def test_sample_database_has_expected_tables_and_data(sample_database: Path) -> 
         "viagens",
         "registos_atraso",
     }
-    assert counts["comboios"] == 30
+    assert counts["comboios"] == len(TRAINS)
     assert counts["estacoes"] == 30
-    assert counts["viagens"] == 3600
-    assert counts["registos_atraso"] > 5000
+    assert counts["viagens"] == len(ROUTES) * SAMPLE_DAY_COUNT
+    assert counts["viagens"] > 10_000
+    assert counts["registos_atraso"] > 12_000
 
 
 def test_sample_database_covers_multiple_statuses_and_a_wide_date_range(
@@ -56,11 +60,32 @@ def test_sample_database_covers_multiple_statuses_and_a_wide_date_range(
         ).fetchone()[0]
 
     assert set(statuses) == {"Realizada", "Suprimida", "Planeada"}
-    assert statuses["Realizada"] > 2500
-    assert statuses["Suprimida"] > 100
-    assert statuses["Planeada"] > 500
+    assert statuses["Realizada"] > 8_000
+    assert statuses["Suprimida"] > 400
+    assert statuses["Planeada"] > 1_000
     assert date_range == ("2026-07-01", "2026-10-28")
-    assert train_count == 30
+    assert train_count == len(TRAINS)
+
+
+def test_sample_database_has_dense_daily_service_and_varied_delays(sample_database: Path) -> None:
+    with sqlite3.connect(sample_database) as connection:
+        daily_trip_counts = [
+            count
+            for (count,) in connection.execute("SELECT COUNT(*) FROM viagens GROUP BY data_viagem")
+        ]
+        delay_range = connection.execute(
+            "SELECT MIN(atraso_minutos), MAX(atraso_minutos) FROM registos_atraso"
+        ).fetchone()
+        synthetic_train_count = connection.execute(
+            "SELECT COUNT(*) FROM comboios WHERE codigo LIKE 'SIM-%'"
+        ).fetchone()[0]
+
+    assert len(daily_trip_counts) == SAMPLE_DAY_COUNT
+    assert min(daily_trip_counts) == len(ROUTES)
+    assert min(daily_trip_counts) >= 100
+    assert delay_range[0] == 0
+    assert delay_range[1] > 60
+    assert synthetic_train_count > 70
 
 
 def test_sample_database_has_no_broken_foreign_keys(sample_database: Path) -> None:
@@ -90,7 +115,7 @@ def test_changed_database_is_replaced(tmp_path: Path) -> None:
 
     assert service.ensure_current() is True
     with sqlite3.connect(database_path) as connection:
-        assert connection.execute("SELECT COUNT(*) FROM comboios").fetchone()[0] == 30
+        assert connection.execute("SELECT COUNT(*) FROM comboios").fetchone()[0] == len(TRAINS)
 
 
 def test_missing_database_is_created(tmp_path: Path) -> None:
@@ -106,4 +131,4 @@ def test_corrupt_database_is_replaced(tmp_path: Path) -> None:
 
     assert _service(database_path).ensure_current() is True
     with sqlite3.connect(database_path) as connection:
-        assert connection.execute("SELECT COUNT(*) FROM comboios").fetchone()[0] == 30
+        assert connection.execute("SELECT COUNT(*) FROM comboios").fetchone()[0] == len(TRAINS)

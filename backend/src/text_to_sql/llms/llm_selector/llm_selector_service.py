@@ -9,6 +9,7 @@ from text_to_sql.errors import LLMError
 from text_to_sql.llms.llm_selector.constants import (
     CLASSIFICATION_INSTRUCTIONS,
     MAX_CLARIFICATION_ITERATIONS,
+    PROMPT_INJECTION_TERMS_PATTERN,
 )
 from text_to_sql.llms.llm_selector.llm_selector_model import (
     ConversationMessage,
@@ -80,8 +81,19 @@ class LLMSelectorService:
         question: str,
         history: Sequence[ConversationMessage] = (),
     ) -> QuestionClassificationResult:
-        messages = [_response_input_message(message) for message in history]
-        messages.append(_response_input_message(ConversationMessage(role="user", content=question)))
+        sanitized_question = self._sanitize_user_content(question)
+        messages = [
+            _response_input_message(
+                ConversationMessage(
+                    role=message.role,
+                    content=self._sanitize_user_content(message.content),
+                )
+            )
+            for message in history
+        ]
+        messages.append(
+            _response_input_message(ConversationMessage(role="user", content=sanitized_question))
+        )
 
         try:
             response = self.client.responses.parse(
@@ -104,3 +116,10 @@ class LLMSelectorService:
         except ValidationError as error:
             message = f"OpenAI returned an invalid question classification: {error}"
             raise LLMError(message) from error
+
+    def _sanitize_user_content(self, content: str) -> str:
+        sanitized = PROMPT_INJECTION_TERMS_PATTERN.sub("", content)
+        sanitized = " ".join(sanitized.split()).strip()
+        if not sanitized:
+            raise ValueError("The question cannot be empty after removing unsafe prompt terms.")
+        return sanitized

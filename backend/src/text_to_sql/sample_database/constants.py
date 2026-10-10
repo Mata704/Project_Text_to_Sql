@@ -1,4 +1,4 @@
-from datetime import time
+from datetime import date, datetime, time, timedelta
 
 STATIONS = [
     (1, "Lisboa - Santa Apolónia", "Lisboa", "Lisboa"),
@@ -33,7 +33,7 @@ STATIONS = [
     (30, "Nine", "Vila Nova de Famalicão", "Braga"),
 ]
 
-TRAINS = [
+BASE_TRAINS = [
     (1, "IC523", "Intercidades", "CP", 300),
     (2, "IC720", "Intercidades", "CP", 300),
     (3, "AP125", "Alfa Pendular", "CP", 290),
@@ -66,7 +66,7 @@ TRAINS = [
     (30, "R7102", "Regional", "CP", 180),
 ]
 
-ROUTES = [
+BASE_ROUTES = [
     (1, time(8, 0), 1, 3, 180),
     (2, time(9, 0), 3, 1, 180),
     (3, time(7, 15), 4, 2, 220),
@@ -99,6 +99,61 @@ ROUTES = [
     (30, time(13, 25), 30, 20, 75),
 ]
 
+_TRAIN_TYPE_PREFIXES = {
+    "Alfa Pendular": "AP",
+    "Intercidades": "IC",
+    "Regional": "R",
+    "Urbano": "U",
+}
+_SYNTHETIC_DEPARTURE_OFFSETS_HOURS = (3, 6, 9)
+_LATEST_SYNTHETIC_DEPARTURE = time(20, 0)
+
+
+def _expand_daily_services() -> tuple[list[tuple[object, ...]], list[tuple[object, ...]]]:
+    trains = list(BASE_TRAINS)
+    routes: list[tuple[object, ...]] = []
+    type_sequences = {train_type: 0 for train_type in _TRAIN_TYPE_PREFIXES}
+
+    for base_route in BASE_ROUTES:
+        train_id, departure_time, origin_id, destination_id, duration_minutes = base_route
+        base_train = BASE_TRAINS[train_id - 1]
+        routes.append(base_route)
+
+        for offset_hours in _SYNTHETIC_DEPARTURE_OFFSETS_HOURS:
+            departure_datetime = datetime.combine(date.min, departure_time) + timedelta(
+                hours=offset_hours
+            )
+            synthetic_departure = departure_datetime.time()
+            if synthetic_departure >= _LATEST_SYNTHETIC_DEPARTURE:
+                continue
+
+            train_type = str(base_train[2])
+            type_sequences[train_type] += 1
+            synthetic_train_id = len(trains) + 1
+            trains.append(
+                (
+                    synthetic_train_id,
+                    f"SIM-{_TRAIN_TYPE_PREFIXES[train_type]}-{type_sequences[train_type]:04}",
+                    train_type,
+                    base_train[3],
+                    base_train[4],
+                )
+            )
+            routes.append(
+                (
+                    synthetic_train_id,
+                    synthetic_departure,
+                    origin_id,
+                    destination_id,
+                    duration_minutes,
+                )
+            )
+
+    return trains, routes
+
+
+TRAINS, ROUTES = _expand_daily_services()
+
 DELAY_REASONS = [
     "Avaria de material circulante",
     "Condicionamento da infraestrutura",
@@ -110,6 +165,7 @@ DELAY_REASONS = [
 SAMPLE_FIRST_DAY = (2026, 7, 1)
 SAMPLE_DAY_COUNT = 120
 SAMPLE_COMPLETED_THROUGH = (2026, 10, 10)
+SAMPLE_DATABASE_SEED = 20261010
 
 SAMPLE_DATABASE_SCHEMA = """
 PRAGMA foreign_keys = ON;

@@ -57,10 +57,12 @@ No arranque da CLI, o [`SampleDatabaseService`](src/text_to_sql/sample_database/
 cria ou atualiza automaticamente a base SQLite de exemplo em `data/`. Compara
 schema e dados; quando a base já corresponde aos dados esperados, não substitui
 nem reescreve o ficheiro. Os nomes e localizações das estações são estações
-reais da rede CP; comboios, horários e registos de atraso são dados sintéticos,
-criados para desenvolvimento e demonstração. A amostra tem 30 comboios, 30
-estações e 3.600 viagens entre 1 de julho e 28 de outubro de 2026; depois de
-10 de outubro, as viagens são marcadas como planeadas.
+reais da rede CP; serviços adicionais, horários e registos de atraso são
+sintéticos, criados para desenvolvimento e demonstração, e não representam o
+horário oficial da CP. A amostra contém 30 estações, 104 serviços diários,
+12.480 viagens e 19.968 registos de atraso entre 1 de julho e 28 de outubro de
+2026. Os atrasos usam uma distribuição fixa e reproduzível; depois de 10 de
+outubro, as viagens são marcadas como planeadas.
 
 ## Serviço SQLite
 
@@ -203,6 +205,11 @@ Como resultado, a primeira LLM devolve um objeto estruturado com
 pedidos relevantes ou irrelevantes; pedidos ambíguos solicitam clarificação. A
 CLI conserva até cinco trocas de clarificação como contexto e limita a cinco
 iterações por pergunta.
+As instruções do selector tratam a pergunta e o histórico como conteúdo não
+fiável e limitam o modelo à classificação ferroviária. Um filtro regex remove
+expressões comuns de tentativa de alteração ou revelação do prompt antes de
+enviar pergunta e histórico ao modelo; é uma defesa adicional, não uma garantia
+de segurança.
 
 Exemplos de perguntas:
 
