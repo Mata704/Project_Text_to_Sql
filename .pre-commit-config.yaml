@@ -1,0 +1,21 @@
+repos:
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run --directory backend pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --directory backend ruff check .
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: ruff-format
+        name: ruff format --check
+        entry: uv run --directory backend ruff format --check .
+        language: system
+        pass_filenames: false
+        always_run: true
