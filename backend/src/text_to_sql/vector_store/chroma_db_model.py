@@ -4,14 +4,20 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from text_to_sql.vector_store.constants import (
+    DEFAULT_COLLECTION_NAME,
+    DEFAULT_DISTANCE_METRIC,
+    DEFAULT_VECTOR_STORE_BATCH_SIZE,
+)
+
 
 class ChromaDBConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    collection_name: str = Field(default="train_documentation", min_length=1)
+    collection_name: str = Field(default=DEFAULT_COLLECTION_NAME, min_length=1)
     persist_directory: Path | None = None
-    distance_metric: Literal["cosine", "l2", "ip"] = "cosine"
-    batch_size: int = Field(default=500, gt=0)
+    distance_metric: Literal["cosine", "l2", "ip"] = DEFAULT_DISTANCE_METRIC
+    batch_size: int = Field(default=DEFAULT_VECTOR_STORE_BATCH_SIZE, gt=0)
 
     @field_validator("collection_name")
     @classmethod

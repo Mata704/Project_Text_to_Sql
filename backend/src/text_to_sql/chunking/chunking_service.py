@@ -1,5 +1,4 @@
 import hashlib
-import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,10 +6,12 @@ from pathlib import Path
 import tiktoken
 
 from text_to_sql.chunking.chunking_model import ChunkingConfig, DocumentChunk
-
-_HEADING_PATTERN = re.compile(r"^(#{1,6})[ \t]+(.+?)\s*#*\s*$")
-_SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\s+")
-_TABLE_SEPARATOR_PATTERN = re.compile(r"^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$")
+from text_to_sql.chunking.constants import (
+    HEADING_PATTERN,
+    SENTENCE_PATTERN,
+    TABLE_SEPARATOR_PATTERN,
+    TOKENIZER_ENCODING,
+)
 
 
 @dataclass(frozen=True)
@@ -23,7 +24,7 @@ class _TextUnit:
 class ChunkingService:
     def __init__(self, config: ChunkingConfig | None = None) -> None:
         self.config = config or ChunkingConfig()
-        self._tokenizer = tiktoken.get_encoding("cl100k_base")
+        self._tokenizer = tiktoken.get_encoding(TOKENIZER_ENCODING)
 
     def chunk_file(self, path: Path) -> list[DocumentChunk]:
         if not path.is_file():
@@ -100,7 +101,7 @@ class ChunkingService:
                 continue
             if in_fenced_block:
                 continue
-            heading_match = _HEADING_PATTERN.match(line)
+            heading_match = HEADING_PATTERN.match(line)
             if heading_match and len(heading_match.group(1)) == 1:
                 return heading_match.group(2).strip()
         return Path(source).stem
@@ -117,7 +118,7 @@ class ChunkingService:
             if line.lstrip().startswith("```"):
                 in_fenced_block = not in_fenced_block
 
-            heading_match = None if in_fenced_block else _HEADING_PATTERN.match(line)
+            heading_match = None if in_fenced_block else HEADING_PATTERN.match(line)
             if heading_match is not None:
                 if section_lines:
                     yield tuple(title for _, title in heading_stack), section_lines
@@ -216,7 +217,7 @@ class ChunkingService:
             return self._split_fenced_block(block, max_chars)
 
         sentences = [
-            sentence.strip() for sentence in _SENTENCE_PATTERN.split(text) if sentence.strip()
+            sentence.strip() for sentence in SENTENCE_PATTERN.split(text) if sentence.strip()
         ]
         return [
             unit
@@ -230,7 +231,7 @@ class ChunkingService:
         max_chars: int,
     ) -> list[_TextUnit]:
         table_lines = [line for _, line in lines]
-        if len(table_lines) < 2 or not _TABLE_SEPARATOR_PATTERN.match(table_lines[1]):
+        if len(table_lines) < 2 or not TABLE_SEPARATOR_PATTERN.match(table_lines[1]):
             return self._split_oversized_text(
                 "\n".join(table_lines),
                 lines[0][0],
@@ -375,7 +376,7 @@ class ChunkingService:
     def _is_table(self, lines: Sequence[str]) -> bool:
         return (
             len(lines) >= 2
-            and _TABLE_SEPARATOR_PATTERN.match(lines[1]) is not None
+            and TABLE_SEPARATOR_PATTERN.match(lines[1]) is not None
             and all("|" in line for line in lines)
         )
 

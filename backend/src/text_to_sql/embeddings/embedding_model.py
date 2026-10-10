@@ -2,13 +2,18 @@ import math
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from text_to_sql.embeddings.constants import (
+    DEFAULT_EMBEDDING_BATCH_SIZE,
+    DEFAULT_EMBEDDING_MODEL,
+)
+
 
 class EmbeddingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    model: str = Field(default="text-embedding-3-small", min_length=1)
+    model: str = Field(default=DEFAULT_EMBEDDING_MODEL, min_length=1)
     dimensions: int | None = Field(default=None, gt=0)
-    batch_size: int = Field(default=128, gt=0)
+    batch_size: int = Field(default=DEFAULT_EMBEDDING_BATCH_SIZE, gt=0)
 
     @field_validator("model")
     @classmethod

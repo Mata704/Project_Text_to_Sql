@@ -44,8 +44,11 @@ Bash:
 uv run --project backend pre-commit install
 ```
 
-Edite `.env` e preencha `OPENAI_API_KEY`. O repositório inclui uma base de dados
-SQLite de exemplo em `data/comboios.sqlite3` para as próximas fases.
+Edite `.env` e preencha `OPENAI_API_KEY`. Os modelos podem ser configurados com
+`OPENAI_MODEL` (predefinição `gpt-4.1-mini`) e `OPENAI_EMBEDDING_MODEL`
+(predefinição `text-embedding-3-small`); se não forem definidos, são usados
+estes valores por omissão. O repositório inclui uma base de dados SQLite de
+exemplo em `data/comboios.sqlite3` para as próximas fases.
 O schema, a descrição das tabelas e exemplos de consultas estão documentados em
 [`documentation/`](documentation/README.md), preparados para reutilização na
 futura RAG.
@@ -98,8 +101,9 @@ embeddings e depois armazenados na ChromaDB.
 
 O serviço [`EmbeddingService`](src/text_to_sql/embeddings/embedding_service.py)
 converte uma lista de textos em vetores usando `text-embedding-3-small` por
-omissão. É independente do chunking e pode ser usado com os conteúdos dos
-chunks ou diretamente com uma pergunta. Os pedidos são enviados em lotes e os
+omissão. A CLI permite substituir o modelo com `OPENAI_EMBEDDING_MODEL` no
+`.env`. É independente do chunking e pode ser usado com os conteúdos dos chunks
+ou diretamente com uma pergunta. Os pedidos são enviados em lotes e os
 resultados mantêm a ordem do texto de entrada.
 
 ```python
@@ -250,19 +254,24 @@ src/text_to_sql/
 ├── config.py                 # Configuração OpenAI
 ├── errors.py                 # Erros de configuração e LLM
 ├── chunking/
+│   ├── constants.py          # Limites predefinidos e padrões Markdown
 │   ├── chunking_model.py     # Configuração e modelo Pydantic do chunk
 │   └── chunking_service.py   # Leitura e divisão de documentos Markdown
 ├── embeddings/
+│   ├── constants.py          # Modelo e tamanho de lote predefinidos
 │   ├── embedding_model.py    # Configuração e modelo Pydantic do embedding
 │   └── embedding_service.py  # Criação de embeddings para textos e queries
 ├── vector_store/
+│   ├── constants.py          # Coleção, métrica e lote predefinidos
 │   ├── chroma_db_model.py    # Configuração e modelo de chunks armazenados
 │   └── chroma_db_service.py  # Persistência e pesquisa na ChromaDB
 ├── document_ingestion/
+│   ├── constants.py                 # Caminho predefinido da documentação
 │   ├── document_ingestion_model.py   # Configuração e resultado da ingestão
 │   └── document_ingestion_service.py # Pipeline documentação → ChromaDB
 └── llms/
     └── llm_selector/
+        ├── constants.py             # Modelo, instruções e limite de clarificação
         ├── llm_selector_service.py # Prompt, chamada OpenAI e fluxo de clarificações
         └── llm_selector_model.py   # Modelos Pydantic usados pelo selector
 ```

@@ -1,11 +1,13 @@
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from text_to_sql.chunking.constants import DEFAULT_MAX_CHUNK_CHARS, DEFAULT_OVERLAP_CHARS
+
 
 class ChunkingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    max_chunk_chars: int = Field(default=2400, gt=0)
-    overlap_chars: int = Field(default=300, ge=0)
+    max_chunk_chars: int = Field(default=DEFAULT_MAX_CHUNK_CHARS, gt=0)
+    overlap_chars: int = Field(default=DEFAULT_OVERLAP_CHARS, ge=0)
 
     @model_validator(mode="after")
     def validate_overlap(self) -> ChunkingConfig:

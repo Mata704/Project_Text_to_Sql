@@ -9,10 +9,8 @@ from text_to_sql.llms.llm_selector import (
     LLMSelectorService,
     QuestionClassificationResult,
 )
-from text_to_sql.llms.llm_selector.llm_selector_service import (
-    MAX_CLARIFICATION_ITERATIONS,
-    _ConversationContext,
-)
+from text_to_sql.llms.llm_selector.constants import MAX_CLARIFICATION_ITERATIONS
+from text_to_sql.llms.llm_selector.llm_selector_service import _ConversationContext
 
 
 def test_first_stage_result_requires_clarification_only_for_ambiguous() -> None:

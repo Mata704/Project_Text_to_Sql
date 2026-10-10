@@ -1,7 +1,8 @@
 import sys
 
 from text_to_sql.config import Settings
-from text_to_sql.document_ingestion import DocumentIngestionService
+from text_to_sql.document_ingestion import DocumentIngestionConfig, DocumentIngestionService
+from text_to_sql.embeddings import EmbeddingConfig
 from text_to_sql.errors import ConfigurationError, TextToSQLError
 from text_to_sql.llms import LLMSelectorService
 
@@ -18,7 +19,13 @@ def main() -> int:
             )
         api_key = settings.openai_api_key.get_secret_value()
 
-        ingestion_result = DocumentIngestionService(api_key=api_key).run()
+        ingestion_config = DocumentIngestionConfig(
+            embedding=EmbeddingConfig(model=settings.openai_embedding_model)
+        )
+        ingestion_result = DocumentIngestionService(
+            api_key=api_key,
+            config=ingestion_config,
+        ).run()
         if ingestion_result.skipped:
             print("Documentação já está sincronizada na ChromaDB.")
         else:
