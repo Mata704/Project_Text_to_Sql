@@ -106,8 +106,10 @@ class _UsageAggregate:
 class UsageMetricsService:
     """Accumulates API usage across all calls in one CLI interaction."""
 
-    def __init__(self) -> None:
-        self.session_id = str(uuid4())
+    def __init__(self, session_id: str | None = None) -> None:
+        if session_id is not None and not session_id.strip():
+            raise ValueError("The usage metrics session ID cannot be empty.")
+        self.session_id = session_id or str(uuid4())
         self._components: dict[str, _UsageAggregate] = {}
         self._total = _UsageAggregate()
 

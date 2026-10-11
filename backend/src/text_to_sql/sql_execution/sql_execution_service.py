@@ -45,6 +45,7 @@ class SQLExecutionWithRetriesService:
                         sql=current_sql,
                         parameters=current_parameters,
                         attempts=attempt,
+                        error=str(error),
                     )
 
                 repair = LLMSQLRepairService(

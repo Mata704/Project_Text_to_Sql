@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from text_to_sql.errors import LLMError, SQLiteDatabaseError
+from text_to_sql.interaction_logs import InteractionLogService
 from text_to_sql.llms import LLMSQLGeneratorService
 from text_to_sql.llms.common import OpenAIRequestError
 from text_to_sql.llms.llm_sql_generator import SQLGenerationResult
@@ -41,10 +42,11 @@ def _result() -> SQLGenerationResult:
     )
 
 
-def test_sql_generator_returns_structured_sql_and_validates_citation(capsys) -> None:
+def test_sql_generator_returns_structured_sql_and_validates_citation() -> None:
     mock_client = Mock()
     mock_client.responses.parse.return_value = Mock(output_parsed=_result())
     sqlite_service = Mock(spec=SQLiteService)
+    interaction_logs = InteractionLogService()
     with patch(
         "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
@@ -53,6 +55,7 @@ def test_sql_generator_returns_structured_sql_and_validates_citation(capsys) -> 
             api_key="test-key",
             model="test-model",
             sqlite_service=sqlite_service,
+            interaction_logs=interaction_logs,
         )
 
     result = service.generate("Quantas viagens existem?", _evidence())
@@ -64,13 +67,25 @@ def test_sql_generator_returns_structured_sql_and_validates_citation(capsys) -> 
     assert call["model"] == "test-model"
     assert call["text_format"] is SQLGenerationResult
     assert "SELECT" in call["instructions"]
+    assert "COUNT para contagens" in call["instructions"]
+    assert "SUM para totais" in call["instructions"]
+    assert "AVG para médias" in call["instructions"]
+    assert "MIN para mínimos e MAX para máximos" in call["instructions"]
+    assert "COUNT(DISTINCT coluna)" in call["instructions"]
+    assert "denominador pedido" in call["instructions"]
+    assert "SUM(CASE WHEN condição THEN 1 ELSE 0 END)" in call["instructions"]
+    assert "taxas por grupo" in call["instructions"]
+    assert "com HAVING, não WHERE" in call["instructions"]
+    assert "verifica o sinal da subtração" in call["instructions"]
+    assert "maior agregado por entidade" in call["instructions"]
+    assert "entidade associada ao maior valor individual" in call["instructions"]
     assert "Quantas viagens existem?" in call["input"][0]["content"]
     assert "A tabela viagens contém a data_viagem." in call["input"][0]["content"]
     sqlite_service.validate_select.assert_called_once_with(
         "SELECT COUNT(*) FROM viagens;",
         {},
     )
-    assert "Validação do LLM SQL Generator: query SELECT confirmada." in capsys.readouterr().out
+    assert interaction_logs.entries[-1].event == "select_validated"
 
 
 def test_sql_generator_uses_same_failure_when_there_is_no_evidence() -> None:
@@ -181,14 +196,17 @@ def test_sql_generator_rejects_invalid_sqlite_query() -> None:
             sqlite_service=sqlite_service,
         )
 
-    with pytest.raises(LLMError, match="Não foi possível gerar uma query SQL segura"):
+    with pytest.raises(
+        LLMError,
+        match="Não foi possível gerar uma query SQL segura.*no such column",
+    ):
         service.generate("Quantas viagens existem?", _evidence())
 
     assert sqlite_service.validate_select.call_count == 3
     assert mock_client.responses.parse.call_count == 3
 
 
-def test_sql_generator_retries_unsafe_query_and_returns_safe_replacement(capsys) -> None:
+def test_sql_generator_retries_unsafe_query_and_returns_safe_replacement() -> None:
     mock_client = Mock()
     mock_client.responses.parse.side_effect = [
         Mock(
@@ -209,6 +227,7 @@ def test_sql_generator_retries_unsafe_query_and_returns_safe_replacement(capsys)
         Mock(output_parsed=_result()),
     ]
     sqlite_service = Mock(spec=SQLiteService)
+    interaction_logs = InteractionLogService()
     with patch(
         "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
@@ -216,6 +235,7 @@ def test_sql_generator_retries_unsafe_query_and_returns_safe_replacement(capsys)
         service = LLMSQLGeneratorService(
             api_key="test-key",
             sqlite_service=sqlite_service,
+            interaction_logs=interaction_logs,
         )
 
     result = service.generate("Quantas viagens existem?", _evidence())
@@ -230,7 +250,7 @@ def test_sql_generator_retries_unsafe_query_and_returns_safe_replacement(capsys)
         "SELECT COUNT(*) FROM viagens;",
         {},
     )
-    assert "query SELECT confirmada" in capsys.readouterr().out
+    assert interaction_logs.entries[-1].event == "select_validated"
 
 
 def test_sql_generator_retries_unanswerable_response_and_returns_safe_query() -> None:

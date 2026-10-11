@@ -59,5 +59,76 @@
     "question": "Qual o comboio com maior atraso médio? Quero o id do comboio.",
     "sql": "SELECT v.id_comboio, ROUND(AVG(ra.atraso_minutos), 2) AS atraso_medio_chegada_minutos, COUNT(*) AS numero_chegadas FROM registos_atraso AS ra JOIN viagens AS v ON v.id_viagem = ra.id_viagem WHERE v.estado = 'Realizada' AND ra.tipo_registo = 'Chegada' GROUP BY v.id_comboio ORDER BY atraso_medio_chegada_minutos DESC, v.id_comboio LIMIT 1;",
     "parameters": {}
+  },
+  {
+    "question": "Qual o comboio com um atraso mediano maior?",
+    "sql": "SELECT id_comboio, atraso_mediano_minutos FROM (SELECT id_comboio, AVG(atraso_minutos) AS atraso_mediano_minutos FROM (SELECT v.id_comboio, ra.atraso_minutos, ROW_NUMBER() OVER (PARTITION BY v.id_comboio ORDER BY ra.atraso_minutos) AS posicao, COUNT(*) OVER (PARTITION BY v.id_comboio) AS total FROM viagens AS v JOIN registos_atraso AS ra ON ra.id_viagem = v.id_viagem WHERE v.estado = 'Realizada' AND ra.tipo_registo = 'Chegada') AS atrasos_ordenados WHERE posicao IN ((total + 1) / 2, (total + 2) / 2) GROUP BY id_comboio) AS medianas ORDER BY atraso_mediano_minutos DESC, id_comboio LIMIT 1;",
+    "parameters": {}
+  },
+  {
+    "question": "Qual foi o maior atraso de chegada registado?",
+    "sql": "SELECT MAX(ra.atraso_minutos) AS maior_atraso_minutos FROM registos_atraso AS ra JOIN viagens AS v ON v.id_viagem = ra.id_viagem WHERE v.estado = 'Realizada' AND ra.tipo_registo = 'Chegada';",
+    "parameters": {}
+  },
+  {
+    "question": "Qual foi o menor atraso de chegada registado?",
+    "sql": "SELECT MIN(ra.atraso_minutos) AS menor_atraso_minutos FROM registos_atraso AS ra JOIN viagens AS v ON v.id_viagem = ra.id_viagem WHERE v.estado = 'Realizada' AND ra.tipo_registo = 'Chegada';",
+    "parameters": {}
+  },
+  {
+    "question": "Quantos comboios diferentes realizaram viagens entre 1 e 8 de outubro de 2026?",
+    "sql": "SELECT COUNT(DISTINCT id_comboio) AS comboios_com_viagens_realizadas FROM viagens WHERE estado = 'Realizada' AND data_viagem >= :data_inicio AND data_viagem < :data_fim;",
+    "parameters": {
+      "data_inicio": "2026-10-01",
+      "data_fim": "2026-10-08"
+    }
+  },
+  {
+    "question": "Que percentagem das viagens foi suprimida entre 1 e 8 de outubro de 2026?",
+    "sql": "SELECT ROUND(100.0 * SUM(CASE WHEN estado = 'Suprimida' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2) AS percentagem_viagens_suprimidas FROM viagens WHERE data_viagem >= :data_inicio AND data_viagem < :data_fim;",
+    "parameters": {
+      "data_inicio": "2026-10-01",
+      "data_fim": "2026-10-08"
+    }
+  },
+  {
+    "question": "Quantas viagens realizadas, planeadas e suprimidas houve por dia entre 1 e 8 de outubro de 2026?",
+    "sql": "SELECT data_viagem, SUM(CASE WHEN estado = 'Realizada' THEN 1 ELSE 0 END) AS viagens_realizadas, SUM(CASE WHEN estado = 'Planeada' THEN 1 ELSE 0 END) AS viagens_planeadas, SUM(CASE WHEN estado = 'Suprimida' THEN 1 ELSE 0 END) AS viagens_suprimidas FROM viagens WHERE data_viagem >= :data_inicio AND data_viagem < :data_fim GROUP BY data_viagem ORDER BY data_viagem;",
+    "parameters": {
+      "data_inicio": "2026-10-01",
+      "data_fim": "2026-10-08"
+    }
+  },
+  {
+    "question": "Quais as cinco rotas com maior percentagem de viagens suprimidas, considerando apenas rotas com pelo menos 100 viagens?",
+    "sql": "SELECT origem.nome AS origem, destino.nome AS destino, ROUND(100.0 * SUM(CASE WHEN v.estado = 'Suprimida' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2) AS percentagem_suprimida, COUNT(*) AS total_viagens FROM viagens AS v JOIN estacoes AS origem ON origem.id_estacao = v.estacao_origem_id JOIN estacoes AS destino ON destino.id_estacao = v.estacao_destino_id GROUP BY v.estacao_origem_id, v.estacao_destino_id, origem.nome, destino.nome HAVING COUNT(*) >= :minimo_viagens ORDER BY percentagem_suprimida DESC, origem.nome, destino.nome LIMIT :limite;",
+    "parameters": {
+      "minimo_viagens": 100,
+      "limite": 5
+    }
+  },
+  {
+    "question": "Que tipos de comboio tiveram atraso médio de chegada superior a 1 minuto?",
+    "sql": "SELECT c.tipo, ROUND(AVG(ra.atraso_minutos), 2) AS atraso_medio_minutos, COUNT(*) AS chegadas FROM registos_atraso AS ra JOIN viagens AS v ON v.id_viagem = ra.id_viagem JOIN comboios AS c ON c.id_comboio = v.id_comboio WHERE v.estado = 'Realizada' AND ra.tipo_registo = 'Chegada' GROUP BY c.tipo HAVING AVG(ra.atraso_minutos) > :atraso_medio_minimo ORDER BY atraso_medio_minutos DESC, c.tipo;",
+    "parameters": {
+      "atraso_medio_minimo": 1
+    }
+  },
+  {
+    "question": "Em que comboios o atraso aumentou mais, em média, entre a partida e a chegada?",
+    "sql": "SELECT v.id_comboio, ROUND(AVG(chegada.atraso_minutos - partida.atraso_minutos), 2) AS variacao_media_atraso_minutos, COUNT(*) AS viagens_com_registos_completos FROM viagens AS v JOIN registos_atraso AS partida ON partida.id_viagem = v.id_viagem AND partida.tipo_registo = 'Partida' JOIN registos_atraso AS chegada ON chegada.id_viagem = v.id_viagem AND chegada.tipo_registo = 'Chegada' WHERE v.estado = 'Realizada' GROUP BY v.id_comboio ORDER BY variacao_media_atraso_minutos DESC, v.id_comboio LIMIT :limite;",
+    "parameters": {
+      "limite": 5
+    }
+  },
+  {
+    "question": "Qual o comboio com maior atraso?",
+    "sql": "SELECT c.codigo, c.tipo, v.data_viagem, ra.atraso_minutos AS atraso_chegada_minutos FROM registos_atraso AS ra JOIN viagens AS v ON v.id_viagem = ra.id_viagem JOIN comboios AS c ON c.id_comboio = v.id_comboio WHERE v.estado = 'Realizada' AND ra.tipo_registo = 'Chegada' ORDER BY ra.atraso_minutos DESC, v.data_viagem, v.id_viagem LIMIT 1;",
+    "parameters": {}
+  },
+  {
+    "question": "Qual o comboio com menos atraso?",
+    "sql": "SELECT c.codigo, c.tipo, v.data_viagem, ra.atraso_minutos AS atraso_chegada_minutos FROM registos_atraso AS ra JOIN viagens AS v ON v.id_viagem = ra.id_viagem JOIN comboios AS c ON c.id_comboio = v.id_comboio WHERE v.estado = 'Realizada' AND ra.tipo_registo = 'Chegada' ORDER BY ra.atraso_minutos ASC, v.data_viagem, v.id_viagem LIMIT 1;",
+    "parameters": {}
   }
 ]

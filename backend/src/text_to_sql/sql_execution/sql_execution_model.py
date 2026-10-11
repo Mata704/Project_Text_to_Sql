@@ -11,3 +11,4 @@ class SQLExecutionResult(BaseModel):
     parameters: dict[str, SQLiteValue]
     rows: list[dict[str, object]] = Field(default_factory=list)
     attempts: int
+    error: str | None = None

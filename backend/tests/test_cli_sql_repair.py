@@ -35,6 +35,7 @@ def test_sql_execution_repair_stops_after_three_total_attempts(
 
     assert result.succeeded is False
     assert result.attempts == 3
+    assert result.error == "third failure"
     assert sqlite_service.fetch_all.call_count == 3
     assert repair_service.repair.call_count == 2
 

@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -56,12 +57,19 @@ def test_cli_retrieves_only_relevant_questions(
 
         def run(self):
             calls.append(({}, "ingestion-run"))
-            return SimpleNamespace(skipped=True, chunk_count=0)
+            return SimpleNamespace(skipped=True, chunk_count=0, embedded_count=0)
 
     class FakeSelectorService:
-        def __init__(self, api_key: str, model: str, usage_metrics=None) -> None:
+        def __init__(
+            self,
+            api_key: str,
+            model: str,
+            usage_metrics=None,
+            interaction_logs=None,
+        ) -> None:
             self.kwargs = {"api_key": api_key, "model": model}
             self.usage_metrics = usage_metrics
+            self.interaction_logs = interaction_logs
 
         def run(self, question: str) -> None:
             calls.append((self.kwargs, question))
@@ -71,7 +79,18 @@ def test_cli_retrieves_only_relevant_questions(
                 usage=SimpleNamespace(input_tokens=10, output_tokens=2, total_tokens=12),
                 elapsed_seconds=0.01,
             )
-            return SimpleNamespace(status=status, normalized_query="Pergunta normalizada?")
+            self.interaction_logs.record(
+                level="info",
+                component="question_classifier",
+                event="question_classified",
+                message="A pergunta foi classificada.",
+                details={"status": status},
+            )
+            return SimpleNamespace(
+                status=status,
+                normalized_query="Pergunta normalizada?",
+                clarification_question="Que data?" if status == "ambiguous" else None,
+            )
 
     class FakeRetrievalService:
         def __init__(self, api_key: str, config, usage_metrics=None) -> None:
@@ -93,6 +112,7 @@ def test_cli_retrieves_only_relevant_questions(
             model: str,
             sqlite_service,
             usage_metrics=None,
+            interaction_logs=None,
         ) -> None:
             self.sqlite_service = sqlite_service
             calls.append(
@@ -160,18 +180,18 @@ def test_cli_retrieves_only_relevant_questions(
         FakeSelectorService,
     )
     monkeypatch.setattr(
-        "text_to_sql.cli.RetrievalService",
+        "text_to_sql.cli_pipeline.RetrievalService",
         FakeRetrievalService,
     )
     monkeypatch.setattr(
-        "text_to_sql.cli.LLMSQLGeneratorService",
+        "text_to_sql.cli_pipeline.LLMSQLGeneratorService",
         FakeSQLGeneratorService,
     )
     monkeypatch.setattr(
-        "text_to_sql.cli.LLMResultInterpreterService",
+        "text_to_sql.cli_pipeline.LLMResultInterpreterService",
         FakeResultInterpreterService,
     )
-    monkeypatch.setattr("text_to_sql.cli.SQLiteService", FakeSQLiteService)
+    monkeypatch.setattr("text_to_sql.cli_pipeline.SQLiteService", FakeSQLiteService)
     monkeypatch.setattr("builtins.input", lambda _prompt: "Quantas viagens?")
 
     assert main() == 0
@@ -185,8 +205,7 @@ def test_cli_retrieves_only_relevant_questions(
         "Quantas viagens?",
     )
     assert calls[3] == selector_call
-    captured = capsys.readouterr()
-    output = captured.out
+    response = json.loads(capsys.readouterr().out)
     assert ("retrieval-init" in [call[1] for call in calls]) is should_retrieve
     if should_retrieve:
         assert calls[4][0]["api_key"] == "test-key"
@@ -202,10 +221,20 @@ def test_cli_retrieves_only_relevant_questions(
             "sql-generator-init",
         )
         assert calls[7][1] == "Pergunta normalizada?"
-        assert "Chunks recuperados:" in output
-        assert "1. ID: viagens-001 | score: 0.910 | fonte: tables/viagens.md" in output
-        assert "A documentação descreve as viagens." in output
-        assert "Query SQL gerada:" in output
+        assert response["role"] == "assistant"
+        assert response["question"] == "Quantas viagens?"
+        assert response["answer"] == "Foram encontradas 42 viagens."
+        assert response["sessionId"] == response["usageMetrics"]["session_id"]
+        assert response["evidence"] == [
+            {
+                "rank": 1,
+                "source": "tables/viagens.md",
+                "chunk_id": "viagens-001",
+                "score": 0.91,
+                "content": "A documentação descreve as viagens.",
+                "citations": ["Descrição das viagens."],
+            }
+        ]
         assert calls[8] == (
             {
                 "query": "SELECT COUNT(*) FROM viagens;",
@@ -228,17 +257,116 @@ def test_cli_retrieves_only_relevant_questions(
             {"rows": [{"total_viagens": 42}]},
             "Quantas viagens?",
         )
-        assert "SELECT COUNT(*) FROM viagens;" in output
-        assert "Foram encontradas 42 viagens." in output
-        assert '"total_viagens": 42' not in output
-        assert '"state": "Realizada"' in output
-        assert "Métricas de utilização das APIs:" in output
-        assert "question_classifier" in output
-        assert output.index("Foram encontradas 42 viagens.") < output.index(
-            "Métricas de utilização"
-        )
+        assert response["usageMetrics"]["total"]["calls"] == 1
+        assert "question_classifier" in response["usageMetrics"]["components"]
+        assert response["error"] is None
     else:
         assert len(calls) == 4
-        assert "Chunks recuperados:" not in output
-        assert "Não foram encontradas evidências" not in output
-        assert "Métricas de utilização das APIs:" in output
+        assert response["evidence"] == []
+        assert response["answer"] == (
+            "Que data?" if status == "ambiguous" else "Pergunta normalizada?"
+        )
+
+
+def test_cli_includes_sqlite_failure_reason_in_response_and_logs(
+    monkeypatch,
+    capsys,
+) -> None:
+    from types import SimpleNamespace
+
+    from pydantic import SecretStr
+
+    from text_to_sql.cli import main
+
+    question = "Qual o combóio com maior atraso?"
+    sqlite_error = "Could not read from SQLite: no such column: atraso"
+
+    class FakeIngestionService:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def run(self):
+            return SimpleNamespace(skipped=True, chunk_count=0, embedded_count=0)
+
+    class FakeSelectorService:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def run(self, _question: str):
+            return SimpleNamespace(status="relevant", normalized_query=question)
+
+    class FakeRetrievalService:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def retrieve(self, _question: str):
+            chunk = SimpleNamespace(
+                chunk_id="delays-001",
+                metadata={"source": "sql-examples/02-atrasos.md"},
+                content="Atrasos de chegada por comboio.",
+            )
+            return [SimpleNamespace(chunk=chunk, score=0.9)]
+
+    class FakeSQLiteService:
+        def validate_select(self, _sql: str, _parameters: dict[str, object]) -> None:
+            pass
+
+    class FakeSQLGeneratorService:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def generate(self, _question: str, _evidence):
+            return SimpleNamespace(
+                sql="SELECT atraso FROM viagens;",
+                parameters=[],
+                citations=[],
+            )
+
+    class FakeSQLExecutionService:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def execute(self, **_kwargs):
+            return SimpleNamespace(
+                succeeded=False,
+                attempts=3,
+                error=sqlite_error,
+            )
+
+    monkeypatch.setattr(
+        "text_to_sql.cli.Settings",
+        lambda: SimpleNamespace(
+            openai_api_key=SecretStr("test-key"),
+            openai_model="test-model",
+            openai_embedding_model="test-embedding-model",
+        ),
+    )
+    monkeypatch.setattr(
+        "text_to_sql.cli.SampleDatabaseService",
+        lambda: SimpleNamespace(ensure_current=lambda: False),
+    )
+    monkeypatch.setattr("text_to_sql.cli.DocumentIngestionService", FakeIngestionService)
+    monkeypatch.setattr("text_to_sql.cli.LLMSelectorService", FakeSelectorService)
+    monkeypatch.setattr("text_to_sql.cli_pipeline.RetrievalService", FakeRetrievalService)
+    monkeypatch.setattr("text_to_sql.cli_pipeline.SQLiteService", FakeSQLiteService)
+    monkeypatch.setattr("text_to_sql.cli_pipeline.LLMSQLGeneratorService", FakeSQLGeneratorService)
+    monkeypatch.setattr(
+        "text_to_sql.cli_pipeline.SQLExecutionWithRetriesService",
+        FakeSQLExecutionService,
+    )
+    monkeypatch.setattr("builtins.input", lambda _prompt: question)
+
+    assert main() == 1
+    response = json.loads(capsys.readouterr().out)
+
+    assert response["question"] == question
+    assert response["answer"] is None
+    assert response["error"] == (
+        "Não foi possível executar a query após 3 tentativas. "
+        f"Erro: {sqlite_error}. Reformule a pergunta."
+    )
+    execution_log = next(log for log in response["logs"] if log["event"] == "execution_failed")
+    assert execution_log["details"] == {
+        "attempts": 3,
+        "error": sqlite_error,
+    }

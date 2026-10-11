@@ -2,6 +2,7 @@ import re
 from collections.abc import Sequence
 
 from text_to_sql.errors import LLMError, SQLiteDatabaseError
+from text_to_sql.interaction_logs import InteractionLogService
 from text_to_sql.llms.common import (
     OpenAIRequestError,
     create_openai_client,
@@ -28,11 +29,13 @@ class LLMSQLGeneratorService:
         model: str = DEFAULT_SQL_GENERATION_MODEL,
         sqlite_service: SQLiteService | None = None,
         usage_metrics: UsageMetricsService | None = None,
+        interaction_logs: InteractionLogService | None = None,
     ) -> None:
         self.client = create_openai_client(api_key)
         self.model = model
         self.sqlite_service = sqlite_service or SQLiteService()
         self.usage_metrics = usage_metrics
+        self.interaction_logs = interaction_logs
 
     def generate(
         self,
@@ -43,7 +46,10 @@ class LLMSQLGeneratorService:
         if not question:
             raise ValueError("The SQL generation question cannot be empty.")
         if not evidence:
-            raise LLMError(SQL_GENERATION_FAILURE_MESSAGE)
+            raise LLMError(
+                f"{SQL_GENERATION_FAILURE_MESSAGE} "
+                "Motivo: não foram encontradas evidências para fundamentar a query."
+            )
 
         base_input = (
             f"Pergunta:\n{question}\n\n"
@@ -86,13 +92,23 @@ class LLMSQLGeneratorService:
                 parameters = {parameter.name: parameter.value for parameter in result.parameters}
                 self.sqlite_service.validate_select(result.sql, parameters)
             except (LLMError, SQLiteDatabaseError) as error:
-                retry_feedback = f"Query rejeitada: {result.sql}. Motivo: {error}"
+                retry_feedback = f"Query rejeitada. Motivo: {error}"
                 continue
 
-            print("Validação do LLM SQL Generator: query SELECT confirmada.")
+            if self.interaction_logs is not None:
+                self.interaction_logs.record(
+                    level="info",
+                    component="sql_generator",
+                    event="select_validated",
+                    message="A query SELECT foi validada.",
+                )
             return result
 
-        raise LLMError(SQL_GENERATION_FAILURE_MESSAGE)
+        raise LLMError(
+            f"{SQL_GENERATION_FAILURE_MESSAGE} "
+            f"Após {MAX_SQL_GENERATION_ATTEMPTS} tentativas. "
+            f"Último motivo: {retry_feedback or 'o modelo não gerou uma query válida.'}"
+        )
 
     def _format_evidence(self, evidence: Sequence[RetrievedChunk]) -> str:
         return "\n\n".join(

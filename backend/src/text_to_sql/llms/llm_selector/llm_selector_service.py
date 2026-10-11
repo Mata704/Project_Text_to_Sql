@@ -1,12 +1,11 @@
 from collections.abc import Sequence
-from uuid import uuid4
 
 from openai.types.responses import EasyInputMessageParam, ResponseInputItemParam
 
+from text_to_sql.interaction_logs import InteractionLogService
 from text_to_sql.llms.common import create_openai_client, parse_structured_response
 from text_to_sql.llms.llm_selector.constants import (
     CLASSIFICATION_INSTRUCTIONS,
-    MAX_CLARIFICATION_ITERATIONS,
     PROMPT_INJECTION_TERMS_PATTERN,
 )
 from text_to_sql.llms.llm_selector.llm_selector_model import (
@@ -20,63 +19,41 @@ def _response_input_message(message: ConversationMessage) -> ResponseInputItemPa
     return EasyInputMessageParam(role=message.role, content=message.content)
 
 
-class _ConversationContext:
-    def __init__(self) -> None:
-        self.session_id = str(uuid4())
-        self._messages: list[ConversationMessage] = []
-
-    @property
-    def messages(self) -> list[ConversationMessage]:
-        return list(self._messages)
-
-    def add_clarification_exchange(self, question: str, clarification: str) -> None:
-        self._messages.extend(
-            [
-                ConversationMessage(role="user", content=question),
-                ConversationMessage(role="assistant", content=clarification),
-            ]
-        )
-        self._messages = self._messages[-2 * MAX_CLARIFICATION_ITERATIONS :]
-
-
 class LLMSelectorService:
     def __init__(
         self,
         api_key: str,
         model: str,
         usage_metrics: UsageMetricsService | None = None,
+        interaction_logs: InteractionLogService | None = None,
     ) -> None:
         self.client = create_openai_client(api_key)
         self.model = model
         self.usage_metrics = usage_metrics
+        self.interaction_logs = interaction_logs
 
     def run(self, question: str) -> QuestionClassificationResult:
         question = question.strip()
         if not question:
             raise ValueError("The question cannot be empty.")
 
-        context = _ConversationContext()
-        for iteration in range(MAX_CLARIFICATION_ITERATIONS):
-            classification = self.classify_question(question, context.messages)
-            print("Resposta da primeira LLM:")
-            print(classification.model_dump_json(indent=2))
-
-            if classification.status in {"relevant", "irrelevant"}:
-                return classification
-
-            if iteration == MAX_CLARIFICATION_ITERATIONS - 1:
-                print(
-                    "Não foi possível clarificar a pergunta no limite de "
-                    f"{MAX_CLARIFICATION_ITERATIONS} iterações."
+        classification = self.classify_question(question)
+        if self.interaction_logs is not None:
+            self.interaction_logs.record(
+                level="info",
+                component="question_classifier",
+                event="question_classified",
+                message="A pergunta foi classificada.",
+                details={"status": classification.status},
+            )
+            if classification.status == "ambiguous":
+                self.interaction_logs.record(
+                    level="warning",
+                    component="question_classifier",
+                    event="clarification_unresolved",
+                    message="A pergunta requer clarificação do utilizador.",
                 )
-                return classification
-
-            clarification = classification.clarification_question
-            print(f"Clarificação necessária: {clarification}")
-            context.add_clarification_exchange(question, clarification or "")
-            question = input("Resposta: ").strip()
-            if not question:
-                raise ValueError("The clarification answer cannot be empty.")
+        return classification
 
     def classify_question(
         self,

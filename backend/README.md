@@ -269,6 +269,42 @@ citações, latência e tokens do contexto; não faz chamadas a LLM nem é execu
 em cada pergunta da CLI. O fixture de referência usado nos testes está em
 [`tests/fixtures/rag_evaluation_cases.json`](tests/fixtures/rag_evaluation_cases.json).
 
+## Resposta JSON e logs da interação
+
+A CLI escreve um único objeto JSON em `stdout`, adequado para integração
+posterior com a API. Os prompts de entrada interativa são enviados para
+`stderr`, pelo que não contaminam o JSON. `InteractionLogService` acumula
+eventos estruturados durante o percurso; os mesmos `sessionId` e `role`
+(`assistant`) acompanham a pergunta, a resposta final, as evidências
+recuperadas com as citações, as métricas de uso e os logs. Erros conhecidos
+também são devolvidos no campo `error`, com um evento de nível `error` nos logs.
+Quando as tentativas de execução SQL se esgotam, o campo inclui o número de
+tentativas e a mensagem devolvida pelo SQLite, para facilitar o diagnóstico.
+
+Exemplo de estrutura:
+
+```json
+{
+  "sessionId": "uuid-da-interacao",
+  "role": "assistant",
+  "question": "Qual foi o atraso médio?",
+  "answer": "A resposta em linguagem natural.",
+  "evidence": [
+    {
+      "rank": 1,
+      "source": "tables/registos_atraso.md",
+      "chunk_id": "id-do-chunk",
+      "score": 0.91,
+      "content": "Conteúdo do chunk.",
+      "citations": ["Excerto citado."]
+    }
+  ],
+  "usageMetrics": {},
+  "logs": [],
+  "error": null
+}
+```
+
 ## Executar
 
 PowerShell:
@@ -392,6 +428,9 @@ src/text_to_sql/
 │   └── document_ingestion_service.py # Pipeline documentação → ChromaDB
 ├── usage_metrics/
 │   └── usage_metrics_service.py      # Agregação de uso das APIs por sessão
+├── interaction_logs/
+│   ├── interaction_log_service.py    # Eventos estruturados e ID da interação
+│   └── interaction_response_model.py # Modelo JSON da resposta final
 ├── rag_evaluation/
 │   └── rag_evaluation_service.py     # Métricas RAG offline para testes
 └── llms/

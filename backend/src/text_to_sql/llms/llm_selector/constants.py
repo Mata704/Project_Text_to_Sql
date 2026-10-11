@@ -1,7 +1,6 @@
 import re
 
 DEFAULT_LLM_MODEL = "gpt-4.1-mini"
-MAX_CLARIFICATION_ITERATIONS = 5
 
 PROMPT_INJECTION_TERMS_PATTERN = re.compile(
     r"\b(?:"
@@ -37,9 +36,15 @@ CLASSIFICATION_INSTRUCTIONS = (
     "Usa status='relevant' quando o pedido for sobre comboios, estações, "
     "viagens, horários previstos, estados de viagem ou atrasos. Usa "
     "status='irrelevant' para pedidos fora deste âmbito. Usa status='ambiguous' "
-    "quando o pedido estiver dentro do âmbito, mas faltar informação ou houver "
-    "mais do que uma interpretação plausível; nesse caso, faz uma pergunta de "
-    "clarificação curta e específica.\n\n"
+    "apenas quando faltar informação indispensável para formular uma consulta "
+    "correta e não houver uma interpretação geral razoável. Perguntas gerais "
+    "sobre o comboio com maior ou menor atraso são relevantes e respondíveis "
+    "com os registos disponíveis: assume atraso individual de chegada quando "
+    "não for indicada média ou mediana, e não perguntes qual a data se o pedido "
+    "for pelo maior/menor de todo o período disponível. Nunca perguntes "
+    "'Queres a resposta?' nem peças confirmação. Só pede uma clarificação "
+    "curta e específica quando, por exemplo, se perguntar pelo atraso de uma "
+    "viagem concreta sem identificar qual.\n\n"
     "Escreve normalized_query como uma pergunta autónoma e clara em português, "
     "incorporando respostas anteriores relevantes sem inventar dados. Quando "
     "status='irrelevant', usa normalized_query como resposta final ao utilizador "
