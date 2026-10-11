@@ -23,7 +23,7 @@ def test_sql_repair_returns_select_and_validates_it_with_sqlite() -> None:
     mock_client.responses.parse.return_value = _response()
     sqlite_service = Mock(spec=SQLiteService)
     with patch(
-        "text_to_sql.llms.llm_sql_repair.llm_sql_repair_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         service = LLMSQLRepairService(
@@ -65,7 +65,7 @@ def test_sql_repair_rejects_query_not_accepted_by_sqlite() -> None:
         "Generated SQL is not a valid SELECT query: no such column"
     )
     with patch(
-        "text_to_sql.llms.llm_sql_repair.llm_sql_repair_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         service = LLMSQLRepairService(

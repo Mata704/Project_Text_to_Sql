@@ -1,11 +1,9 @@
 from collections.abc import Sequence
 from uuid import uuid4
 
-from openai import OpenAI, OpenAIError
 from openai.types.responses import EasyInputMessageParam, ResponseInputItemParam
-from pydantic import ValidationError
 
-from text_to_sql.errors import LLMError
+from text_to_sql.llms.common import create_openai_client, parse_structured_response
 from text_to_sql.llms.llm_selector.constants import (
     CLASSIFICATION_INSTRUCTIONS,
     MAX_CLARIFICATION_ITERATIONS,
@@ -42,10 +40,7 @@ class _ConversationContext:
 
 class LLMSelectorService:
     def __init__(self, api_key: str, model: str) -> None:
-        try:
-            self.client = OpenAI(api_key=api_key)
-        except OpenAIError as error:
-            raise LLMError(f"Could not initialize the OpenAI client: {error}") from error
+        self.client = create_openai_client(api_key)
         self.model = model
 
     def run(self, question: str) -> QuestionClassificationResult:
@@ -95,27 +90,15 @@ class LLMSelectorService:
             _response_input_message(ConversationMessage(role="user", content=sanitized_question))
         )
 
-        try:
-            response = self.client.responses.parse(
-                model=self.model,
-                instructions=CLASSIFICATION_INSTRUCTIONS,
-                input=messages,
-                text_format=QuestionClassificationResult,
-            )
-        except OpenAIError as error:
-            raise LLMError(f"OpenAI could not classify the question: {error}") from error
-        except ValidationError as error:
-            message = f"OpenAI returned an invalid question classification: {error}"
-            raise LLMError(message) from error
-
-        result = response.output_parsed
-        if result is None:
-            raise LLMError("OpenAI did not return a structured question classification.")
-        try:
-            return QuestionClassificationResult.model_validate(result)
-        except ValidationError as error:
-            message = f"OpenAI returned an invalid question classification: {error}"
-            raise LLMError(message) from error
+        return parse_structured_response(
+            self.client,
+            model=self.model,
+            instructions=CLASSIFICATION_INSTRUCTIONS,
+            messages=messages,
+            response_model=QuestionClassificationResult,
+            action="classify the question",
+            result_name="question classification",
+        )
 
     def _sanitize_user_content(self, content: str) -> str:
         sanitized = PROMPT_INJECTION_TERMS_PATTERN.sub("", content)

@@ -1,9 +1,7 @@
 from collections.abc import Sequence
 
-from openai import OpenAI, OpenAIError
-from pydantic import ValidationError
-
 from text_to_sql.errors import LLMError, SQLiteDatabaseError
+from text_to_sql.llms.common import create_openai_client, parse_structured_response
 from text_to_sql.llms.llm_sql_repair.constants import (
     DEFAULT_SQL_REPAIR_MODEL,
     SQL_REPAIR_INSTRUCTIONS,
@@ -20,10 +18,7 @@ class LLMSQLRepairService:
         model: str = DEFAULT_SQL_REPAIR_MODEL,
         sqlite_service: SQLiteService | None = None,
     ) -> None:
-        try:
-            self.client = OpenAI(api_key=api_key)
-        except OpenAIError as error:
-            raise LLMError(f"Could not initialize the OpenAI client: {error}") from error
+        self.client = create_openai_client(api_key)
         self.model = model
         self.sqlite_service = sqlite_service or SQLiteService()
 
@@ -42,24 +37,15 @@ class LLMSQLRepairService:
             f"Erro SQLite:\n{error}\n\n"
             f"Evidências disponíveis:\n{self._format_evidence(evidence)}"
         )
-        try:
-            response = self.client.responses.parse(
-                model=self.model,
-                instructions=SQL_REPAIR_INSTRUCTIONS,
-                input=[{"role": "user", "content": response_input}],
-                text_format=SQLRepairResult,
-            )
-        except OpenAIError as error:
-            raise LLMError(f"OpenAI could not repair SQL: {error}") from error
-        except ValidationError as error:
-            raise LLMError(f"OpenAI returned an invalid SQL repair: {error}") from error
-
-        if response.output_parsed is None:
-            raise LLMError("OpenAI did not return a structured SQL repair.")
-        try:
-            result = SQLRepairResult.model_validate(response.output_parsed)
-        except ValidationError as error:
-            raise LLMError(f"OpenAI returned an invalid SQL repair: {error}") from error
+        result = parse_structured_response(
+            self.client,
+            model=self.model,
+            instructions=SQL_REPAIR_INSTRUCTIONS,
+            messages=[{"role": "user", "content": response_input}],
+            response_model=SQLRepairResult,
+            action="repair SQL",
+            result_name="SQL repair",
+        )
 
         values = {parameter.name: parameter.value for parameter in result.parameters}
         try:

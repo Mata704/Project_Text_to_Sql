@@ -52,7 +52,7 @@ def test_classifier_sends_history_and_current_question_without_database_schema()
     ]
 
     with patch(
-        "text_to_sql.llms.llm_selector.llm_selector_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         selector = LLMSelectorService(api_key="test-key", model="test-model")
@@ -97,7 +97,7 @@ def test_classifier_removes_prompt_injection_terms_from_question_and_history() -
     ]
 
     with patch(
-        "text_to_sql.llms.llm_selector.llm_selector_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         selector = LLMSelectorService(api_key="test-key", model="test-model")
@@ -123,7 +123,7 @@ def test_classifier_removes_portuguese_prompt_injection_terms() -> None:
     mock_client.responses.parse.return_value = Mock(output_parsed=parsed_result)
 
     with patch(
-        "text_to_sql.llms.llm_selector.llm_selector_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         selector = LLMSelectorService(api_key="test-key", model="test-model")
@@ -139,7 +139,7 @@ def test_classifier_removes_portuguese_prompt_injection_terms() -> None:
 def test_classifier_rejects_input_containing_only_removed_terms() -> None:
     mock_client = Mock()
     with patch(
-        "text_to_sql.llms.llm_selector.llm_selector_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         selector = LLMSelectorService(api_key="test-key", model="test-model")
@@ -155,7 +155,7 @@ def test_classifier_reports_missing_structured_output() -> None:
     mock_client.responses.parse.return_value = Mock(output_parsed=None)
 
     with patch(
-        "text_to_sql.llms.llm_selector.llm_selector_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         selector = LLMSelectorService(api_key="test-key", model="test-model")
@@ -199,7 +199,7 @@ def test_service_run_prompts_clarification_and_prints_each_result(
         Mock(output_parsed=relevant),
     ]
     with patch(
-        "text_to_sql.llms.llm_selector.llm_selector_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         service = LLMSelectorService(api_key="test-key", model="test-model")
@@ -235,7 +235,7 @@ def test_service_stops_after_maximum_clarifications(monkeypatch, capsys) -> None
     mock_client = Mock()
     mock_client.responses.parse.return_value = Mock(output_parsed=ambiguous_result)
     with patch(
-        "text_to_sql.llms.llm_selector.llm_selector_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         service = LLMSelectorService(api_key="test-key", model="test-model")

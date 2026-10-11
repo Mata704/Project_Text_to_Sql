@@ -14,7 +14,7 @@ def test_result_interpreter_answers_original_question_from_rows() -> None:
         output_parsed={"answer": "Foram encontradas 42 viagens."}
     )
     with patch(
-        "text_to_sql.llms.llm_result_interpreter.llm_result_interpreter_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         service = LLMResultInterpreterService(api_key="test-key", model="test-model")
@@ -38,7 +38,7 @@ def test_result_interpreter_passes_empty_rows_to_the_model() -> None:
         output_parsed={"answer": "Não foram encontrados registos."}
     )
     with patch(
-        "text_to_sql.llms.llm_result_interpreter.llm_result_interpreter_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         service = LLMResultInterpreterService(api_key="test-key")
@@ -50,7 +50,7 @@ def test_result_interpreter_passes_empty_rows_to_the_model() -> None:
 
 
 def test_result_interpreter_rejects_empty_question() -> None:
-    with patch("text_to_sql.llms.llm_result_interpreter.llm_result_interpreter_service.OpenAI"):
+    with patch("text_to_sql.llms.common.OpenAI"):
         service = LLMResultInterpreterService(api_key="test-key")
 
     with pytest.raises(ValueError, match="question cannot be empty"):
@@ -61,7 +61,7 @@ def test_result_interpreter_rejects_missing_structured_response() -> None:
     mock_client = Mock()
     mock_client.responses.parse.return_value = Mock(output_parsed=None)
     with patch(
-        "text_to_sql.llms.llm_result_interpreter.llm_result_interpreter_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         service = LLMResultInterpreterService(api_key="test-key")

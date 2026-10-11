@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from text_to_sql.errors import LLMError, SQLiteDatabaseError
 from text_to_sql.llms import LLMSQLGeneratorService
+from text_to_sql.llms.common import OpenAIRequestError
 from text_to_sql.llms.llm_sql_generator import SQLGenerationResult
 from text_to_sql.retrieval import RetrievedChunk
 from text_to_sql.sqlite_db import SQLiteService
@@ -45,7 +46,7 @@ def test_sql_generator_returns_structured_sql_and_validates_citation(capsys) -> 
     mock_client.responses.parse.return_value = Mock(output_parsed=_result())
     sqlite_service = Mock(spec=SQLiteService)
     with patch(
-        "text_to_sql.llms.llm_sql_generator.llm_sql_generator_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         service = LLMSQLGeneratorService(
@@ -75,7 +76,7 @@ def test_sql_generator_returns_structured_sql_and_validates_citation(capsys) -> 
 def test_sql_generator_uses_same_failure_when_there_is_no_evidence() -> None:
     mock_client = Mock()
     with patch(
-        "text_to_sql.llms.llm_sql_generator.llm_sql_generator_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         service = LLMSQLGeneratorService(api_key="test-key")
@@ -83,6 +84,18 @@ def test_sql_generator_uses_same_failure_when_there_is_no_evidence() -> None:
     with pytest.raises(LLMError, match="Não foi possível gerar uma query SQL segura"):
         service.generate("Quantas viagens existem?", [])
     mock_client.responses.parse.assert_not_called()
+
+
+def test_sql_generator_does_not_retry_openai_request_failures() -> None:
+    mock_client = Mock()
+    mock_client.responses.parse.side_effect = OpenAIRequestError("request failed")
+    with patch("text_to_sql.llms.common.OpenAI", return_value=mock_client):
+        service = LLMSQLGeneratorService(api_key="test-key")
+
+    with pytest.raises(OpenAIRequestError, match="request failed"):
+        service.generate("Quantas viagens existem?", _evidence())
+
+    mock_client.responses.parse.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -127,7 +140,7 @@ def test_sql_generator_rejects_non_select_response_from_model() -> None:
         }
     )
     with patch(
-        "text_to_sql.llms.llm_sql_generator.llm_sql_generator_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         service = LLMSQLGeneratorService(api_key="test-key")
@@ -160,7 +173,7 @@ def test_sql_generator_rejects_invalid_sqlite_query() -> None:
         "Generated SQL is not a valid SELECT query: no such column"
     )
     with patch(
-        "text_to_sql.llms.llm_sql_generator.llm_sql_generator_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         service = LLMSQLGeneratorService(
@@ -197,7 +210,7 @@ def test_sql_generator_retries_unsafe_query_and_returns_safe_replacement(capsys)
     ]
     sqlite_service = Mock(spec=SQLiteService)
     with patch(
-        "text_to_sql.llms.llm_sql_generator.llm_sql_generator_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         service = LLMSQLGeneratorService(
@@ -236,7 +249,7 @@ def test_sql_generator_retries_unanswerable_response_and_returns_safe_query() ->
     ]
     sqlite_service = Mock(spec=SQLiteService)
     with patch(
-        "text_to_sql.llms.llm_sql_generator.llm_sql_generator_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         service = LLMSQLGeneratorService(
@@ -313,7 +326,7 @@ def test_sql_generator_rejects_unknown_citation() -> None:
     mock_client = Mock()
     mock_client.responses.parse.return_value = Mock(output_parsed=generated)
     with patch(
-        "text_to_sql.llms.llm_sql_generator.llm_sql_generator_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         service = LLMSQLGeneratorService(api_key="test-key")
@@ -339,7 +352,7 @@ def test_sql_generator_rejects_quote_not_present_in_cited_chunk() -> None:
     mock_client = Mock()
     mock_client.responses.parse.return_value = Mock(output_parsed=generated)
     with patch(
-        "text_to_sql.llms.llm_sql_generator.llm_sql_generator_service.OpenAI",
+        "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
     ):
         service = LLMSQLGeneratorService(api_key="test-key")

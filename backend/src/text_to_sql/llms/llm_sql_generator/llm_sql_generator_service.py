@@ -1,10 +1,12 @@
 import re
 from collections.abc import Sequence
 
-from openai import OpenAI, OpenAIError
-from pydantic import ValidationError
-
 from text_to_sql.errors import LLMError, SQLiteDatabaseError
+from text_to_sql.llms.common import (
+    OpenAIRequestError,
+    create_openai_client,
+    parse_structured_response,
+)
 from text_to_sql.llms.llm_sql_generator.constants import (
     DEFAULT_SQL_GENERATION_MODEL,
     MAX_SQL_GENERATION_ATTEMPTS,
@@ -25,10 +27,7 @@ class LLMSQLGeneratorService:
         model: str = DEFAULT_SQL_GENERATION_MODEL,
         sqlite_service: SQLiteService | None = None,
     ) -> None:
-        try:
-            self.client = OpenAI(api_key=api_key)
-        except OpenAIError as error:
-            raise LLMError(f"Could not initialize the OpenAI client: {error}") from error
+        self.client = create_openai_client(api_key)
         self.model = model
         self.sqlite_service = sqlite_service or SQLiteService()
 
@@ -59,27 +58,19 @@ class LLMSQLGeneratorService:
                     "indica answerable=false e sql=null."
                 )
             try:
-                response = self.client.responses.parse(
+                result = parse_structured_response(
+                    self.client,
                     model=self.model,
                     instructions=SQL_GENERATION_INSTRUCTIONS,
-                    input=[{"role": "user", "content": response_input}],
-                    text_format=SQLGenerationResult,
+                    messages=[{"role": "user", "content": response_input}],
+                    response_model=SQLGenerationResult,
+                    action="generate SQL",
+                    result_name="SQL generation result",
                 )
-            except OpenAIError as error:
-                raise LLMError(f"OpenAI could not generate SQL: {error}") from error
-            except ValidationError as error:
+            except OpenAIRequestError:
+                raise
+            except LLMError as error:
                 retry_feedback = str(error)
-                continue
-
-            if response.output_parsed is None:
-                retry_feedback = "OpenAI não devolveu uma resposta estruturada."
-                continue
-            try:
-                result = SQLGenerationResult.model_validate(response.output_parsed)
-            except ValidationError as error:
-                retry_feedback = (
-                    f"Resposta anterior rejeitada: {response.output_parsed!r}. Motivo: {error}"
-                )
                 continue
 
             if not result.answerable or result.sql is None:

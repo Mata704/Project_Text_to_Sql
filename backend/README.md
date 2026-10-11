@@ -369,6 +369,7 @@ src/text_to_sql/
 │   ├── document_ingestion_model.py   # Configuração e resultado da ingestão
 │   └── document_ingestion_service.py # Pipeline documentação → ChromaDB
 └── llms/
+    ├── common.py                       # Criação do cliente e validação de respostas estruturadas
     ├── llm_selector/
     │   ├── constants.py             # Modelo, instruções e limite de clarificação
     │   ├── llm_selector_service.py # Prompt, chamada OpenAI e fluxo de clarificações
