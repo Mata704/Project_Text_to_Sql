@@ -1,3 +1,4 @@
+import re
 import sqlite3
 from collections.abc import Mapping, Sequence
 from contextlib import closing
@@ -27,6 +28,23 @@ class SQLiteService:
                 return [dict(row) for row in rows]
         except sqlite3.Error as error:
             raise SQLiteDatabaseError(f"Could not read from SQLite: {error}") from error
+
+    def validate_select(
+        self,
+        query: str,
+        parameters: SQLiteParameters = (),
+    ) -> None:
+        self._validate_query(query)
+        if re.match(r"^SELECT\b", query.strip(), re.IGNORECASE) is None:
+            raise SQLiteDatabaseError("Generated SQL must be a SELECT query.")
+
+        database_path = self._existing_database_path()
+        try:
+            with closing(self._connect_read_only(database_path)) as connection:
+                connection.execute(f"EXPLAIN QUERY PLAN {query}", parameters).fetchall()
+        except sqlite3.Error as error:
+            message = f"Generated SQL is not a valid SELECT query: {error}"
+            raise SQLiteDatabaseError(message) from error
 
     def fetch_one(
         self,

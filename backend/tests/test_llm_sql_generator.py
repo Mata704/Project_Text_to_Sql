@@ -3,10 +3,11 @@ from unittest.mock import Mock, patch
 import pytest
 from pydantic import ValidationError
 
-from text_to_sql.errors import LLMError
+from text_to_sql.errors import LLMError, SQLiteDatabaseError
 from text_to_sql.llms import LLMSQLGeneratorService
 from text_to_sql.llms.llm_sql_generator import SQLGenerationResult
 from text_to_sql.retrieval import RetrievedChunk
+from text_to_sql.sqlite_db import SQLiteService
 from text_to_sql.vector_store import StoredChunk
 
 
@@ -39,14 +40,19 @@ def _result() -> SQLGenerationResult:
     )
 
 
-def test_sql_generator_returns_structured_sql_and_validates_citation() -> None:
+def test_sql_generator_returns_structured_sql_and_validates_citation(capsys) -> None:
     mock_client = Mock()
     mock_client.responses.parse.return_value = Mock(output_parsed=_result())
+    sqlite_service = Mock(spec=SQLiteService)
     with patch(
         "text_to_sql.llms.llm_sql_generator.llm_sql_generator_service.OpenAI",
         return_value=mock_client,
     ):
-        service = LLMSQLGeneratorService(api_key="test-key", model="test-model")
+        service = LLMSQLGeneratorService(
+            api_key="test-key",
+            model="test-model",
+            sqlite_service=sqlite_service,
+        )
 
     result = service.generate("Quantas viagens existem?", _evidence())
 
@@ -59,6 +65,11 @@ def test_sql_generator_returns_structured_sql_and_validates_citation() -> None:
     assert "SELECT" in call["instructions"]
     assert "Quantas viagens existem?" in call["input"][0]["content"]
     assert "A tabela viagens contém a data_viagem." in call["input"][0]["content"]
+    sqlite_service.validate_select.assert_called_once_with(
+        "SELECT COUNT(*) FROM viagens;",
+        {},
+    )
+    assert "Validação do LLM SQL Generator: query SELECT confirmada." in capsys.readouterr().out
 
 
 def test_sql_generator_returns_abstention_without_evidence() -> None:
@@ -99,6 +110,74 @@ def test_sql_generation_result_rejects_non_select_queries(sql: str) -> None:
                 }
             ],
         )
+
+
+def test_sql_generator_rejects_non_select_response_from_model() -> None:
+    mock_client = Mock()
+    mock_client.responses.parse.return_value = Mock(
+        output_parsed={
+            "answerable": True,
+            "sql": "DELETE FROM viagens",
+            "parameters": [],
+            "explanation": "Consulta.",
+            "citations": [
+                {
+                    "source": "01-schema.md",
+                    "chunk_id": "schema-1",
+                    "quote": "citação",
+                }
+            ],
+        }
+    )
+    with patch(
+        "text_to_sql.llms.llm_sql_generator.llm_sql_generator_service.OpenAI",
+        return_value=mock_client,
+    ):
+        service = LLMSQLGeneratorService(api_key="test-key")
+
+    with pytest.raises(LLMError, match="invalid SQL generation result"):
+        service.generate("Quantas viagens existem?", _evidence())
+
+    mock_client.responses.parse.assert_called_once()
+
+
+def test_sql_generator_rejects_invalid_sqlite_query() -> None:
+    mock_client = Mock()
+    mock_client.responses.parse.return_value = Mock(
+        output_parsed={
+            "answerable": True,
+            "sql": "SELECT coluna_inexistente FROM viagens",
+            "parameters": [],
+            "explanation": "Consulta.",
+            "citations": [
+                {
+                    "source": "01-schema.md",
+                    "chunk_id": "schema-1",
+                    "quote": "A tabela viagens contém a data_viagem.",
+                }
+            ],
+        }
+    )
+    sqlite_service = Mock(spec=SQLiteService)
+    sqlite_service.validate_select.side_effect = SQLiteDatabaseError(
+        "Generated SQL is not a valid SELECT query: no such column"
+    )
+    with patch(
+        "text_to_sql.llms.llm_sql_generator.llm_sql_generator_service.OpenAI",
+        return_value=mock_client,
+    ):
+        service = LLMSQLGeneratorService(
+            api_key="test-key",
+            sqlite_service=sqlite_service,
+        )
+
+    with pytest.raises(LLMError, match="invalid SQL query"):
+        service.generate("Quantas viagens existem?", _evidence())
+
+    sqlite_service.validate_select.assert_called_once_with(
+        "SELECT coluna_inexistente FROM viagens",
+        {},
+    )
 
 
 def test_sql_generation_result_requires_parameters_for_named_placeholders() -> None:

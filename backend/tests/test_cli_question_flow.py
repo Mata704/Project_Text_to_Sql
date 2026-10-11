@@ -9,7 +9,11 @@ from text_to_sql.document_ingestion import DocumentIngestionConfig
 
 @pytest.mark.parametrize(
     ("status", "should_retrieve"),
-    [("relevant", True), ("irrelevant", False), ("ambiguous", False)],
+    [
+        ("relevant", True),
+        ("irrelevant", False),
+        ("ambiguous", False),
+    ],
 )
 def test_cli_retrieves_only_relevant_questions(
     monkeypatch,
@@ -18,8 +22,20 @@ def test_cli_retrieves_only_relevant_questions(
     should_retrieve: bool,
 ) -> None:
     calls: list[tuple[dict[str, object], str]] = []
+    sqlite_instances = []
 
     class FakeSQLiteService:
+        def __init__(self) -> None:
+            sqlite_instances.append(self)
+
+        def validate_select(self, query: str, parameters: dict[str, object]) -> None:
+            calls.append(
+                (
+                    {"query": query, "parameters": parameters},
+                    "sqlite-validate",
+                )
+            )
+
         def fetch_all(self, query: str, parameters: dict[str, object]):
             calls.append(({"query": query, "parameters": parameters}, "sqlite-fetch"))
             return [{"total_viagens": 42}]
@@ -59,11 +75,26 @@ def test_cli_retrieves_only_relevant_questions(
             return [SimpleNamespace(chunk=chunk, score=0.91)]
 
     class FakeSQLGeneratorService:
-        def __init__(self, api_key: str, model: str) -> None:
-            calls.append(({"api_key": api_key, "model": model}, "sql-generator-init"))
+        def __init__(self, api_key: str, model: str, sqlite_service) -> None:
+            self.sqlite_service = sqlite_service
+            calls.append(
+                (
+                    {
+                        "api_key": api_key,
+                        "model": model,
+                        "sqlite_service": sqlite_service,
+                    },
+                    "sql-generator-init",
+                )
+            )
 
         def generate(self, question: str, evidence):
             calls.append(({"evidence": evidence}, question))
+            parameters = {"state": "Realizada"}
+            self.sqlite_service.validate_select(
+                "SELECT COUNT(*) FROM viagens;",
+                parameters,
+            )
             return SimpleNamespace(
                 explanation="Contagem de viagens.",
                 sql="SELECT COUNT(*) FROM viagens;",
@@ -119,7 +150,8 @@ def test_cli_retrieves_only_relevant_questions(
         "Quantas viagens?",
     )
     assert calls[3] == selector_call
-    output = capsys.readouterr().out
+    captured = capsys.readouterr()
+    output = captured.out
     assert ("retrieval-init" in [call[1] for call in calls]) is should_retrieve
     if should_retrieve:
         assert calls[4][0]["api_key"] == "test-key"
@@ -127,21 +159,32 @@ def test_cli_retrieves_only_relevant_questions(
         assert calls[4][1] == "retrieval-init"
         assert calls[5] == ({}, "Pergunta normalizada?")
         assert calls[6] == (
-            {"api_key": "test-key", "model": "test-model"},
+            {
+                "api_key": "test-key",
+                "model": "test-model",
+                "sqlite_service": sqlite_instances[0],
+            },
             "sql-generator-init",
         )
         assert calls[7][1] == "Pergunta normalizada?"
+        assert "Chunks recuperados:" in output
+        assert "1. ID: viagens-001 | score: 0.910 | fonte: tables/viagens.md" in output
+        assert "A documentação descreve as viagens." in output
+        assert "Query SQL gerada:" in output
         assert calls[8] == (
+            {
+                "query": "SELECT COUNT(*) FROM viagens;",
+                "parameters": {"state": "Realizada"},
+            },
+            "sqlite-validate",
+        )
+        assert calls[9] == (
             {
                 "query": "SELECT COUNT(*) FROM viagens;",
                 "parameters": {"state": "Realizada"},
             },
             "sqlite-fetch",
         )
-        assert "Chunks recuperados:" in output
-        assert "1. ID: viagens-001 | score: 0.910 | fonte: tables/viagens.md" in output
-        assert "A documentação descreve as viagens." in output
-        assert "Query SQL gerada:" in output
         assert "SELECT COUNT(*) FROM viagens;" in output
         assert '"total_viagens": 42' in output
         assert '"state": "Realizada"' in output

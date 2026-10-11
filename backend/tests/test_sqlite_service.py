@@ -57,6 +57,31 @@ def test_fetch_queries_are_read_only_and_parameters_are_not_sql(
         sqlite_service.fetch_all("DELETE FROM estacoes")
 
 
+def test_validate_select_checks_sql_schema_and_parameters(sqlite_service: SQLiteService) -> None:
+    sqlite_service.validate_select(
+        "SELECT nome FROM estacoes WHERE cidade = :city",
+        {"city": "Lisboa"},
+    )
+
+    with pytest.raises(SQLiteDatabaseError, match="not a valid SELECT query"):
+        sqlite_service.validate_select("SELECT coluna_inexistente FROM estacoes")
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "DELETE FROM estacoes",
+        "SELECT nome FROM estacoes; DELETE FROM estacoes",
+    ],
+)
+def test_validate_select_rejects_non_select_or_multiple_statements(
+    sqlite_service: SQLiteService,
+    query: str,
+) -> None:
+    with pytest.raises(SQLiteDatabaseError):
+        sqlite_service.validate_select(query)
+
+
 def test_execute_commits_writes_and_returns_row_metadata(
     sqlite_service: SQLiteService,
 ) -> None:

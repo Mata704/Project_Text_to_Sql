@@ -74,9 +74,11 @@ def main() -> int:
             else:
                 print("Não foram encontradas evidências relevantes na documentação.")
 
+            sqlite_service = SQLiteService()
             generation = LLMSQLGeneratorService(
                 api_key=api_key,
                 model=settings.openai_model,
+                sqlite_service=sqlite_service,
             ).generate(classification.normalized_query, retrieved_chunks)
             print("\nQuery SQL gerada:")
             print(generation.explanation)
@@ -86,7 +88,7 @@ def main() -> int:
                     parameter.name: parameter.value for parameter in generation.parameters
                 }
                 print("Parâmetros: " + json.dumps(parameters, ensure_ascii=False, sort_keys=True))
-                rows = SQLiteService().fetch_all(generation.sql, parameters)
+                rows = sqlite_service.fetch_all(generation.sql, parameters)
                 print("\nResultado:")
                 if rows:
                     print(json.dumps(rows, ensure_ascii=False, indent=2, default=str))
