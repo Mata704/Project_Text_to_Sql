@@ -13,8 +13,150 @@
     "should_answer": true
   },
   {
+    "case_id": "departure-and-arrival-records",
+    "question": "Que tipos de registo de atraso existem e como se distinguem?",
+    "expected_sources": [
+      "tables/registos_atraso.md"
+    ],
+    "expected_facts": [
+      "Partida",
+      "Chegada"
+    ],
+    "should_answer": true
+  },
+  {
+    "case_id": "trip-status-values",
+    "question": "Que estados pode ter uma viagem?",
+    "expected_sources": [
+      "tables/viagens.md",
+      "01-schema.md"
+    ],
+    "expected_facts": [
+      "Planeada",
+      "Realizada",
+      "Suprimida"
+    ],
+    "should_answer": true
+  },
+  {
+    "case_id": "trip-origin-and-destination-joins",
+    "question": "Como obter os nomes das estações de origem e destino de uma viagem?",
+    "expected_sources": [
+      "01-schema.md",
+      "sql-examples/01-viagens.md"
+    ],
+    "expected_facts": [
+      "junte `estacoes` duas vezes",
+      "estacao_origem_id",
+      "estacao_destino_id"
+    ],
+    "should_answer": true
+  },
+  {
+    "case_id": "maximum-arrival-delay",
+    "question": "Como encontrar o maior atraso individual de chegada?",
+    "expected_sources": [
+      "sql-examples/02-atrasos.md",
+      "tables/registos_atraso.md"
+    ],
+    "expected_facts": [
+      "MAX(ra.atraso_minutos)",
+      "estado = 'Realizada'",
+      "ra.tipo_registo = 'Chegada'"
+    ],
+    "should_answer": true
+  },
+  {
+    "case_id": "average-arrival-delay-by-train-type",
+    "question": "Como calcular o atraso médio de chegada por tipo de comboio?",
+    "expected_sources": [
+      "sql-examples/02-atrasos.md",
+      "tables/comboios.md",
+      "tables/viagens.md",
+      "tables/registos_atraso.md"
+    ],
+    "expected_facts": [
+      "AVG(ra.atraso_minutos)",
+      "GROUP BY c.tipo",
+      "tipo_registo = 'Chegada'"
+    ],
+    "should_answer": true
+  },
+  {
+    "case_id": "median-arrival-delay",
+    "question": "Como calcular a mediana dos atrasos de chegada por comboio no SQLite?",
+    "expected_sources": [
+      "sql-examples/02-atrasos.md"
+    ],
+    "expected_facts": [
+      "ROW_NUMBER()",
+      "COUNT(*) OVER",
+      "AVG(atraso_minutos)"
+    ],
+    "should_answer": true
+  },
+  {
+    "case_id": "cancellation-rate",
+    "question": "Como calcular a percentagem de viagens suprimidas num período?",
+    "expected_sources": [
+      "sql-examples/03-agregacoes.md",
+      "tables/viagens.md"
+    ],
+    "expected_facts": [
+      "100.0 * SUM",
+      "NULLIF(COUNT(*), 0)",
+      "denominador"
+    ],
+    "should_answer": true
+  },
+  {
+    "case_id": "cancelled-trips-per-day",
+    "question": "Como contar viagens suprimidas por dia num período?",
+    "expected_sources": [
+      "sql-examples/03-agregacoes.md",
+      "tables/viagens.md"
+    ],
+    "expected_facts": [
+      "estado = 'Suprimida'",
+      "GROUP BY data_viagem",
+      "Só aparecem dias com pelo menos uma supressão."
+    ],
+    "should_answer": true
+  },
+  {
+    "case_id": "official-cp-schedule",
+    "question": "Os horários desta amostra são horários oficiais da CP?",
+    "expected_sources": [
+      "README.md"
+    ],
+    "expected_facts": [
+      "sintéticos",
+      "não representam o horário oficial da CP"
+    ],
+    "should_answer": true
+  },
+  {
+    "case_id": "station-city-and-district",
+    "question": "Que localização está documentada para cada estação?",
+    "expected_sources": [
+      "tables/estacoes.md"
+    ],
+    "expected_facts": [
+      "`cidade`",
+      "`distrito`"
+    ],
+    "should_answer": true
+  },
+  {
     "case_id": "ticket-prices-not-documented",
     "question": "Qual é o preço de um bilhete de comboio?",
+    "expected_sources": [],
+    "expected_facts": [],
+    "should_answer": false
+  },
+  {
+    "case_id": "passenger-count-not-documented",
+    "question": "Quantos passageiros viajaram em cada comboio?",
     "expected_sources": [],
     "expected_facts": [],
     "should_answer": false

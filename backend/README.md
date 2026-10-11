@@ -263,10 +263,20 @@ em vez de inventarem custos. `known_cost_usd` mantém o subtotal calculável.
 O [`RAGEvaluationService`](src/text_to_sql/rag_evaluation/rag_evaluation_service.py)
 é separado do percurso da CLI e destina-se a testes/avaliações offline com casos
 rotulados (`expected_sources`, `expected_facts` e `should_answer`). Calcula
-recall de fontes, cobertura de factos, correção da answerability, validade de
-citações, latência e tokens do contexto; não faz chamadas a LLM nem é executado
-em cada pergunta da CLI. O fixture de referência usado nos testes está em
+precisão, recall e MRR das fontes recuperadas, cobertura de factos, correção da
+answerability, validade e cobertura das fontes citadas, latência e tokens do
+contexto. Métricas sem referências rotuladas são `null` e são excluídas das
+médias, em vez de serem tratadas como resultados perfeitos. O fixture contém
+casos positivos e negativos, inclui perguntas que exigem várias fontes e
+verifica que todas as fontes esperadas existem na documentação. Esta avaliação
+não faz chamadas a LLM nem é executada em cada pergunta da CLI; os factos da
+resposta são medidos por correspondência textual normalizada, não por equivalência
+semântica. O fixture está em
 [`tests/fixtures/rag_evaluation_cases.json`](tests/fixtures/rag_evaluation_cases.json).
+O relatório
+[`reports/rag-evaluation-2026-10-11.md`](reports/rag-evaluation-2026-10-11.md)
+compara `top_k`, thresholds e tamanhos de chunk para os casos do fixture; mede
+retrieval e não geração de respostas end-to-end.
 
 ## Resposta JSON e logs da interação
 
