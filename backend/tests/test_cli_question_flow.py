@@ -19,6 +19,11 @@ def test_cli_retrieves_only_relevant_questions(
 ) -> None:
     calls: list[tuple[dict[str, object], str]] = []
 
+    class FakeSQLiteService:
+        def fetch_all(self, query: str, parameters: dict[str, object]):
+            calls.append(({"query": query, "parameters": parameters}, "sqlite-fetch"))
+            return [{"total_viagens": 42}]
+
     class FakeSampleDatabaseService:
         def ensure_current(self) -> bool:
             calls.append(({}, "database-ensure"))
@@ -62,7 +67,7 @@ def test_cli_retrieves_only_relevant_questions(
             return SimpleNamespace(
                 explanation="Contagem de viagens.",
                 sql="SELECT COUNT(*) FROM viagens;",
-                parameters=[],
+                parameters=[SimpleNamespace(name="state", value="Realizada")],
                 citations=[
                     SimpleNamespace(
                         source="tables/viagens.md",
@@ -100,6 +105,7 @@ def test_cli_retrieves_only_relevant_questions(
         "text_to_sql.cli.LLMSQLGeneratorService",
         FakeSQLGeneratorService,
     )
+    monkeypatch.setattr("text_to_sql.cli.SQLiteService", FakeSQLiteService)
     monkeypatch.setattr("builtins.input", lambda _prompt: "Quantas viagens?")
 
     assert main() == 0
@@ -125,11 +131,20 @@ def test_cli_retrieves_only_relevant_questions(
             "sql-generator-init",
         )
         assert calls[7][1] == "Pergunta normalizada?"
+        assert calls[8] == (
+            {
+                "query": "SELECT COUNT(*) FROM viagens;",
+                "parameters": {"state": "Realizada"},
+            },
+            "sqlite-fetch",
+        )
         assert "Chunks recuperados:" in output
         assert "1. ID: viagens-001 | score: 0.910 | fonte: tables/viagens.md" in output
         assert "A documentação descreve as viagens." in output
         assert "Query SQL gerada:" in output
         assert "SELECT COUNT(*) FROM viagens;" in output
+        assert '"total_viagens": 42' in output
+        assert '"state": "Realizada"' in output
     else:
         assert len(calls) == 4
         assert "Chunks recuperados:" not in output

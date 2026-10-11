@@ -205,8 +205,9 @@ resposta estruturada com uma query SQLite `SELECT`, parâmetros nomeados como
 uma lista de objetos `{name, value}` e citações, ou abstém-se quando as
 evidências não chegam. Valida que os placeholders correspondem exatamente aos
 parâmetros e que as citações apontam para chunks recebidos e excertos do
-conteúdo original. O SQL e os parâmetros são apresentados no CLI, mas a query
-ainda não é executada.
+conteúdo original. O CLI apresenta o SQL e os parâmetros e executa a query
+através do `SQLiteService` em modo somente de leitura; depois imprime as linhas
+de resultado ou indica que a query não devolveu resultados.
 
 ```python
 from text_to_sql.llms import LLMSQLGeneratorService

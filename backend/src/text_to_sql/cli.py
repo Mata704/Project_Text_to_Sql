@@ -8,6 +8,7 @@ from text_to_sql.errors import ConfigurationError, TextToSQLError
 from text_to_sql.llms import LLMSelectorService, LLMSQLGeneratorService
 from text_to_sql.retrieval import RetrievalConfig, RetrievalService
 from text_to_sql.sample_database import SampleDatabaseService
+from text_to_sql.sqlite_db import SQLiteService
 
 
 def main() -> int:
@@ -81,10 +82,16 @@ def main() -> int:
             print(generation.explanation)
             if generation.sql is not None:
                 print(generation.sql)
-                print(
-                    "Parâmetros: "
-                    + json.dumps(generation.parameters, ensure_ascii=False, sort_keys=True)
-                )
+                parameters = {
+                    parameter.name: parameter.value for parameter in generation.parameters
+                }
+                print("Parâmetros: " + json.dumps(parameters, ensure_ascii=False, sort_keys=True))
+                rows = SQLiteService().fetch_all(generation.sql, parameters)
+                print("\nResultado:")
+                if rows:
+                    print(json.dumps(rows, ensure_ascii=False, indent=2, default=str))
+                else:
+                    print("A query não devolveu resultados.")
             for citation in generation.citations:
                 print(f"- {citation.source} / {citation.chunk_id}: {citation.quote}")
     except ValueError as error:
