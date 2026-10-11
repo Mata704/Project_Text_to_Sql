@@ -65,7 +65,7 @@ def test_execute_commits_writes_and_returns_row_metadata(
         INSERT INTO comboios (codigo, tipo, operador, capacidade)
         VALUES (?, ?, ?, ?)
         """,
-        ("TEST1", "Regional", "CP", 100),
+        ("TEST1", "Regional", "Comboios Pedro Mata", 100),
     )
     update_result = sqlite_service.execute(
         "UPDATE comboios SET capacidade = ? WHERE id_comboio = ?",
@@ -91,8 +91,8 @@ def test_execute_many_is_atomic(sqlite_service: SQLiteService) -> None:
             VALUES (?, ?, ?, ?)
             """,
             [
-                ("TEST1", "Regional", "CP", 100),
-                ("IC523", "Regional", "CP", 100),
+                ("TEST1", "Regional", "Comboios Pedro Mata", 100),
+                ("IC523", "Regional", "Comboios Pedro Mata", 100),
             ],
         )
 

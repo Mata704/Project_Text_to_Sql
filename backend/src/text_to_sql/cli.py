@@ -5,6 +5,7 @@ from text_to_sql.document_ingestion import DocumentIngestionConfig, DocumentInge
 from text_to_sql.embeddings import EmbeddingConfig
 from text_to_sql.errors import ConfigurationError, TextToSQLError
 from text_to_sql.llms import LLMSelectorService
+from text_to_sql.retrieval import RetrievalConfig, RetrievalService
 from text_to_sql.sample_database import SampleDatabaseService
 
 
@@ -45,10 +46,31 @@ def main() -> int:
         if not question:
             raise ValueError("The question cannot be empty.")
 
-        LLMSelectorService(
+        classification = LLMSelectorService(
             api_key=api_key,
             model=settings.openai_model,
         ).run(question)
+
+        if classification.status == "relevant":
+            retrieval_config = RetrievalConfig(
+                embedding=ingestion_config.embedding,
+                vector_store=ingestion_config.vector_store,
+            )
+            retrieved_chunks = RetrievalService(
+                api_key=api_key,
+                config=retrieval_config,
+            ).retrieve(classification.normalized_query)
+            if retrieved_chunks:
+                print("Chunks recuperados:")
+                for rank, result in enumerate(retrieved_chunks, start=1):
+                    source = result.chunk.metadata.get("source", "Fonte desconhecida")
+                    print(
+                        f"\n{rank}. ID: {result.chunk.chunk_id} | "
+                        f"score: {result.score:.3f} | fonte: {source}"
+                    )
+                    print(result.chunk.content)
+            else:
+                print("Não foram encontradas evidências relevantes na documentação.")
     except ValueError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1

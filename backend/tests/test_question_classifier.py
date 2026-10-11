@@ -206,8 +206,9 @@ def test_service_run_prompts_clarification_and_prints_each_result(
     responses = iter(["IC523, 5 de outubro de 2026"])
     monkeypatch.setattr("builtins.input", lambda _prompt: next(responses))
 
-    service.run("Qual foi o atraso?")
+    result = service.run("Qual foi o atraso?")
 
+    assert result == relevant
     output = capsys.readouterr().out
     assert output.count("Resposta da primeira LLM:") == 2
     assert "Clarificação necessária: De que comboio e data?" in output
@@ -241,7 +242,8 @@ def test_service_stops_after_maximum_clarifications(monkeypatch, capsys) -> None
     responses = iter(["Ainda não sei"] * (MAX_CLARIFICATION_ITERATIONS - 1))
     monkeypatch.setattr("builtins.input", lambda _prompt: next(responses))
 
-    service.run("Pergunta inicial")
+    result = service.run("Pergunta inicial")
 
+    assert result == ambiguous_result
     assert mock_client.responses.parse.call_count == MAX_CLARIFICATION_ITERATIONS
     assert f"{MAX_CLARIFICATION_ITERATIONS} iterações" in capsys.readouterr().out

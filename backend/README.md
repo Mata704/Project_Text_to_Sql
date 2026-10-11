@@ -57,8 +57,9 @@ No arranque da CLI, o [`SampleDatabaseService`](src/text_to_sql/sample_database/
 cria ou atualiza automaticamente a base SQLite de exemplo em `data/`. Compara
 schema e dados; quando a base já corresponde aos dados esperados, não substitui
 nem reescreve o ficheiro. Os nomes e localizações das estações são estações
-reais da rede CP; serviços adicionais, horários e registos de atraso são
-sintéticos, criados para desenvolvimento e demonstração, e não representam o
+reais da rede CP; o operador é apresentado como `Comboios Pedro Mata`. Serviços
+adicionais, horários e registos de atraso são sintéticos, criados para
+desenvolvimento e demonstração, e não representam o
 horário oficial da CP. A amostra contém 30 estações, 104 serviços diários,
 12.480 viagens e 19.968 registos de atraso entre 1 de julho e 28 de outubro de
 2026. Os atrasos usam uma distribuição fixa e reproduzível; depois de 10 de
@@ -165,6 +166,40 @@ matches = vector_store.search(query_vector, limit=5)
 mais próximos, os metadados e a distância. O serviço valida que chunks e
 embeddings correspondem e que a coleção é usada sempre com o mesmo modelo e
 dimensão de embedding.
+
+## Retrieval
+
+O [`RetrievalService`](src/text_to_sql/retrieval/retrieval_service.py) transforma
+a pergunta num embedding com o mesmo modelo usado na ingestão e consulta a
+coleção persistente da ChromaDB. Devolve os chunks ordenados por relevância,
+com o conteúdo, metadados e score de similaridade (`1 - distância cosine`).
+Por omissão, pesquisa até 5 chunks e descarta scores inferiores a `0.15`;
+ambos os parâmetros são configuráveis por `RetrievalConfig`. Uma vector store
+vazia devolve uma lista vazia sem chamar a API de embeddings.
+
+```python
+from text_to_sql.config import Settings
+from text_to_sql.embeddings import EmbeddingConfig
+from text_to_sql.retrieval import RetrievalConfig, RetrievalService
+
+settings = Settings()
+if settings.openai_api_key is None:
+    raise RuntimeError("Configure OPENAI_API_KEY before retrieval.")
+
+retrieval = RetrievalService(
+    api_key=settings.openai_api_key.get_secret_value(),
+    config=RetrievalConfig(
+        embedding=EmbeddingConfig(model=settings.openai_embedding_model),
+        top_k=5,
+    ),
+)
+results = retrieval.retrieve("Qual é a estação de origem da viagem?")
+for result in results:
+    print(result.score, result.chunk.metadata["source"], result.chunk.content)
+```
+
+O serviço apenas recupera evidências; geração de resposta fundamentada nessas
+evidências será integrada numa etapa posterior.
 
 ## Ingestão automática da documentação
 
@@ -287,6 +322,10 @@ src/text_to_sql/
 │   ├── constants.py          # Coleção, métrica e lote predefinidos
 │   ├── chroma_db_model.py    # Configuração e modelo de chunks armazenados
 │   └── chroma_db_service.py  # Persistência e pesquisa na ChromaDB
+├── retrieval/
+│   ├── constants.py          # Top-k e score mínimo predefinidos
+│   ├── retrieval_model.py    # Configuração e chunks recuperados
+│   └── retrieval_service.py  # Embedding da query e pesquisa semântica
 ├── sqlite_db/
 │   ├── constants.py          # Caminho predefinido da base SQLite
 │   ├── sqlite_db_model.py    # Configuração e resultado de escrita

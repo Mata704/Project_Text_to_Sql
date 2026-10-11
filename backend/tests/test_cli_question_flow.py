@@ -1,12 +1,22 @@
 from types import SimpleNamespace
 
+import pytest
 from pydantic import SecretStr
 
 from text_to_sql.cli import main
 from text_to_sql.document_ingestion import DocumentIngestionConfig
 
 
-def test_cli_only_constructs_and_calls_selector_service(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("status", "should_retrieve"),
+    [("relevant", True), ("irrelevant", False), ("ambiguous", False)],
+)
+def test_cli_retrieves_only_relevant_questions(
+    monkeypatch,
+    capsys,
+    status: str,
+    should_retrieve: bool,
+) -> None:
     calls: list[tuple[dict[str, object], str]] = []
 
     class FakeSampleDatabaseService:
@@ -28,6 +38,20 @@ def test_cli_only_constructs_and_calls_selector_service(monkeypatch) -> None:
 
         def run(self, question: str) -> None:
             calls.append((self.kwargs, question))
+            return SimpleNamespace(status=status, normalized_query="Pergunta normalizada?")
+
+    class FakeRetrievalService:
+        def __init__(self, api_key: str, config) -> None:
+            calls.append(({"api_key": api_key, "config": config}, "retrieval-init"))
+
+        def retrieve(self, question: str):
+            calls.append(({}, question))
+            chunk = SimpleNamespace(
+                chunk_id="viagens-001",
+                metadata={"source": "tables/viagens.md"},
+                content="A documentação descreve as viagens.",
+            )
+            return [SimpleNamespace(chunk=chunk, score=0.91)]
 
     monkeypatch.setattr(
         "text_to_sql.cli.DocumentIngestionService",
@@ -49,6 +73,10 @@ def test_cli_only_constructs_and_calls_selector_service(monkeypatch) -> None:
         "text_to_sql.cli.LLMSelectorService",
         FakeSelectorService,
     )
+    monkeypatch.setattr(
+        "text_to_sql.cli.RetrievalService",
+        FakeRetrievalService,
+    )
     monkeypatch.setattr("builtins.input", lambda _prompt: "Quantas viagens?")
 
     assert main() == 0
@@ -57,7 +85,22 @@ def test_cli_only_constructs_and_calls_selector_service(monkeypatch) -> None:
     assert calls[1][0]["config"].embedding.model == "test-embedding-model"
     assert calls[1][1] == "ingestion-init"
     assert calls[2] == ({}, "ingestion-run")
-    assert calls[3] == (
+    selector_call = (
         {"api_key": "test-key", "model": "test-model"},
         "Quantas viagens?",
     )
+    assert calls[3] == selector_call
+    output = capsys.readouterr().out
+    assert ("retrieval-init" in [call[1] for call in calls]) is should_retrieve
+    if should_retrieve:
+        assert calls[4][0]["api_key"] == "test-key"
+        assert calls[4][0]["config"].embedding.model == "test-embedding-model"
+        assert calls[4][1] == "retrieval-init"
+        assert calls[5] == ({}, "Pergunta normalizada?")
+        assert "Chunks recuperados:" in output
+        assert "1. ID: viagens-001 | score: 0.910 | fonte: tables/viagens.md" in output
+        assert "A documentação descreve as viagens." in output
+    else:
+        assert len(calls) == 4
+        assert "Chunks recuperados:" not in output
+        assert "Não foram encontradas evidências" not in output

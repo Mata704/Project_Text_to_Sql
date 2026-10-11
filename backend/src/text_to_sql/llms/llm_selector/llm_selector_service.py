@@ -48,7 +48,7 @@ class LLMSelectorService:
             raise LLMError(f"Could not initialize the OpenAI client: {error}") from error
         self.model = model
 
-    def run(self, question: str) -> None:
+    def run(self, question: str) -> QuestionClassificationResult:
         question = question.strip()
         if not question:
             raise ValueError("The question cannot be empty.")
@@ -60,14 +60,14 @@ class LLMSelectorService:
             print(classification.model_dump_json(indent=2))
 
             if classification.status in {"relevant", "irrelevant"}:
-                return
+                return classification
 
             if iteration == MAX_CLARIFICATION_ITERATIONS - 1:
                 print(
                     "Não foi possível clarificar a pergunta no limite de "
                     f"{MAX_CLARIFICATION_ITERATIONS} iterações."
                 )
-                return
+                return classification
 
             clarification = classification.clarification_question
             print(f"Clarificação necessária: {clarification}")

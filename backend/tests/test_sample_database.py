@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from text_to_sql.sample_database import SampleDatabaseService
-from text_to_sql.sample_database.constants import ROUTES, TRAINS
+from text_to_sql.sample_database.constants import ROUTES, SAMPLE_OPERATOR, TRAINS
 
 SAMPLE_DAY_COUNT = 120
 
@@ -43,6 +43,15 @@ def test_sample_database_has_expected_tables_and_data(sample_database: Path) -> 
     assert counts["viagens"] == len(ROUTES) * SAMPLE_DAY_COUNT
     assert counts["viagens"] > 10_000
     assert counts["registos_atraso"] > 12_000
+
+
+def test_sample_trains_use_configured_fictional_operator(sample_database: Path) -> None:
+    with sqlite3.connect(sample_database) as connection:
+        operators = {
+            operator for (operator,) in connection.execute("SELECT DISTINCT operador FROM comboios")
+        }
+
+    assert operators == {SAMPLE_OPERATOR}
 
 
 def test_sample_database_covers_multiple_statuses_and_a_wide_date_range(
