@@ -8,6 +8,7 @@ from text_to_sql.llms.llm_result_interpreter.constants import (
 from text_to_sql.llms.llm_result_interpreter.llm_result_interpreter_model import (
     ResultInterpretation,
 )
+from text_to_sql.usage_metrics import UsageMetricsService
 
 
 class LLMResultInterpreterService:
@@ -15,9 +16,11 @@ class LLMResultInterpreterService:
         self,
         api_key: str,
         model: str = DEFAULT_RESULT_INTERPRETER_MODEL,
+        usage_metrics: UsageMetricsService | None = None,
     ) -> None:
         self.client = create_openai_client(api_key)
         self.model = model
+        self.usage_metrics = usage_metrics
 
     def interpret(
         self,
@@ -40,5 +43,7 @@ class LLMResultInterpreterService:
             response_model=ResultInterpretation,
             action="interpret SQL results",
             result_name="result interpretation",
+            usage_metrics=self.usage_metrics,
+            usage_component="result_interpreter",
         )
         return interpretation.answer

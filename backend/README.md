@@ -247,6 +247,28 @@ fingerprint não mudou, reutiliza o índice existente sem fazer novas chamadas �
 API de embeddings. Se mudou, atualiza os chunks e remove da coleção os chunks
 que já não existem nos documentos.
 
+## Métricas de utilização e avaliação RAG
+
+O serviço [`UsageMetricsService`](src/text_to_sql/usage_metrics/usage_metrics_service.py)
+acumula, durante cada execução interativa da CLI, chamadas, falhas, latência e
+tokens por componente/modelo e no total. Inclui classificação, geração e
+reparação SQL, interpretação de resultados e chamadas de embeddings da ingestão
+e do retrieval. Assim, clarificações e retries ficam agregados na mesma sessão.
+A CLI apresenta o relatório JSON no fim, depois da resposta e das citações.
+
+O custo é uma estimativa em USD. A tabela inicial contém apenas `gpt-4.1-mini`,
+com os preços do exemplo de referência; os modelos sem tarifa conhecida (incluindo
+embeddings) indicam `estimated_cost_usd: null` e o número de chamadas sem preço,
+em vez de inventarem custos. `known_cost_usd` mantém o subtotal calculável.
+
+O [`RAGEvaluationService`](src/text_to_sql/rag_evaluation/rag_evaluation_service.py)
+é separado do percurso da CLI e destina-se a testes/avaliações offline com casos
+rotulados (`expected_sources`, `expected_facts` e `should_answer`). Calcula
+recall de fontes, cobertura de factos, correção da answerability, validade de
+citações, latência e tokens do contexto; não faz chamadas a LLM nem é executado
+em cada pergunta da CLI. O fixture de referência usado nos testes está em
+[`tests/fixtures/rag_evaluation_cases.json`](tests/fixtures/rag_evaluation_cases.json).
+
 ## Executar
 
 PowerShell:
@@ -368,6 +390,10 @@ src/text_to_sql/
 │   ├── constants.py                 # Caminho predefinido da documentação
 │   ├── document_ingestion_model.py   # Configuração e resultado da ingestão
 │   └── document_ingestion_service.py # Pipeline documentação → ChromaDB
+├── usage_metrics/
+│   └── usage_metrics_service.py      # Agregação de uso das APIs por sessão
+├── rag_evaluation/
+│   └── rag_evaluation_service.py     # Métricas RAG offline para testes
 └── llms/
     ├── common.py                       # Criação do cliente e validação de respostas estruturadas
     ├── llm_selector/

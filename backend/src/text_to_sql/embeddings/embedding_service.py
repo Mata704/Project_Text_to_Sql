@@ -1,10 +1,12 @@
 from collections.abc import Sequence
+from time import perf_counter
 
 from openai import OpenAI, OpenAIError
 from pydantic import ValidationError
 
 from text_to_sql.embeddings.embedding_model import EmbeddingConfig, TextEmbedding
 from text_to_sql.errors import EmbeddingError
+from text_to_sql.usage_metrics import UsageMetricsService
 
 
 class EmbeddingService:
@@ -12,11 +14,16 @@ class EmbeddingService:
         self,
         api_key: str,
         config: EmbeddingConfig | None = None,
+        *,
+        usage_metrics: UsageMetricsService | None = None,
+        usage_component: str = "embeddings",
     ) -> None:
         if not api_key.strip():
             raise ValueError("The OpenAI API key cannot be empty.")
 
         self.config = config or EmbeddingConfig()
+        self.usage_metrics = usage_metrics
+        self.usage_component = usage_component
         try:
             self.client = OpenAI(api_key=api_key)
         except OpenAIError as error:
@@ -52,10 +59,26 @@ class EmbeddingService:
         if self.config.dimensions is not None:
             request["dimensions"] = self.config.dimensions
 
+        started_at = perf_counter()
         try:
             response = self.client.embeddings.create(**request)
         except OpenAIError as error:
+            if self.usage_metrics is not None:
+                self.usage_metrics.record_call(
+                    component=self.usage_component,
+                    model=self.config.model,
+                    usage=None,
+                    elapsed_seconds=perf_counter() - started_at,
+                    succeeded=False,
+                )
             raise EmbeddingError(f"OpenAI could not create text embeddings: {error}") from error
+        if self.usage_metrics is not None:
+            self.usage_metrics.record_call(
+                component=self.usage_component,
+                model=response.model or self.config.model,
+                usage=response.usage,
+                elapsed_seconds=perf_counter() - started_at,
+            )
 
         response_items = sorted(response.data, key=lambda item: item.index)
         if len(response_items) != len(texts):

@@ -13,6 +13,7 @@ from text_to_sql.llms.llm_selector.llm_selector_model import (
     ConversationMessage,
     QuestionClassificationResult,
 )
+from text_to_sql.usage_metrics import UsageMetricsService
 
 
 def _response_input_message(message: ConversationMessage) -> ResponseInputItemParam:
@@ -39,9 +40,15 @@ class _ConversationContext:
 
 
 class LLMSelectorService:
-    def __init__(self, api_key: str, model: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        usage_metrics: UsageMetricsService | None = None,
+    ) -> None:
         self.client = create_openai_client(api_key)
         self.model = model
+        self.usage_metrics = usage_metrics
 
     def run(self, question: str) -> QuestionClassificationResult:
         question = question.strip()
@@ -98,6 +105,8 @@ class LLMSelectorService:
             response_model=QuestionClassificationResult,
             action="classify the question",
             result_name="question classification",
+            usage_metrics=self.usage_metrics,
+            usage_component="question_classifier",
         )
 
     def _sanitize_user_content(self, content: str) -> str:

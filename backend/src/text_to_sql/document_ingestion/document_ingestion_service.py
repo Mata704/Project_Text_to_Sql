@@ -9,6 +9,7 @@ from text_to_sql.document_ingestion.document_ingestion_model import (
 )
 from text_to_sql.embeddings import EmbeddingService
 from text_to_sql.errors import TextToSQLError
+from text_to_sql.usage_metrics import UsageMetricsService
 from text_to_sql.vector_store import ChromaDBService
 
 
@@ -25,12 +26,15 @@ class DocumentIngestionService:
         chunking_service: ChunkingService | None = None,
         embedding_service: EmbeddingService | None = None,
         vector_store_service: ChromaDBService | None = None,
+        usage_metrics: UsageMetricsService | None = None,
     ) -> None:
         self.config = config or DocumentIngestionConfig()
         self.chunking_service = chunking_service or ChunkingService()
         self.embedding_service = embedding_service or EmbeddingService(
             api_key=api_key,
             config=self.config.embedding,
+            usage_metrics=usage_metrics,
+            usage_component="document_ingestion_embeddings",
         )
         self.vector_store_service = vector_store_service or ChromaDBService(
             config=self.config.vector_store,

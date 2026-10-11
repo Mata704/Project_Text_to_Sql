@@ -9,6 +9,7 @@ from text_to_sql.llms.llm_sql_repair.constants import (
 from text_to_sql.llms.llm_sql_repair.llm_sql_repair_model import SQLRepairResult
 from text_to_sql.retrieval.retrieval_model import RetrievedChunk
 from text_to_sql.sqlite_db import SQLiteService
+from text_to_sql.usage_metrics import UsageMetricsService
 
 
 class LLMSQLRepairService:
@@ -17,10 +18,12 @@ class LLMSQLRepairService:
         api_key: str,
         model: str = DEFAULT_SQL_REPAIR_MODEL,
         sqlite_service: SQLiteService | None = None,
+        usage_metrics: UsageMetricsService | None = None,
     ) -> None:
         self.client = create_openai_client(api_key)
         self.model = model
         self.sqlite_service = sqlite_service or SQLiteService()
+        self.usage_metrics = usage_metrics
 
     def repair(
         self,
@@ -45,6 +48,8 @@ class LLMSQLRepairService:
             response_model=SQLRepairResult,
             action="repair SQL",
             result_name="SQL repair",
+            usage_metrics=self.usage_metrics,
+            usage_component="sql_repair",
         )
 
         values = {parameter.name: parameter.value for parameter in result.parameters}

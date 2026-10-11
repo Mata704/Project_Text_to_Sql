@@ -14,9 +14,11 @@ from text_to_sql.retrieval import RetrievalConfig, RetrievalService
 from text_to_sql.sample_database import SampleDatabaseService
 from text_to_sql.sql_execution import SQLExecutionWithRetriesService
 from text_to_sql.sqlite_db import SQLiteService
+from text_to_sql.usage_metrics import UsageMetricsService
 
 
 def main() -> int:
+    usage_metrics: UsageMetricsService | None = None
     try:
         settings = Settings()
         database_changed = SampleDatabaseService().ensure_current()
@@ -33,6 +35,7 @@ def main() -> int:
                 "OPENAI_API_KEY is missing. Set it in .env or in the environment."
             )
         api_key = settings.openai_api_key.get_secret_value()
+        usage_metrics = UsageMetricsService()
 
         ingestion_config = DocumentIngestionConfig(
             embedding=EmbeddingConfig(model=settings.openai_embedding_model)
@@ -40,6 +43,7 @@ def main() -> int:
         ingestion_result = DocumentIngestionService(
             api_key=api_key,
             config=ingestion_config,
+            usage_metrics=usage_metrics,
         ).run()
         if ingestion_result.skipped:
             print("Documentação já está sincronizada na ChromaDB.")
@@ -56,6 +60,7 @@ def main() -> int:
         classification = LLMSelectorService(
             api_key=api_key,
             model=settings.openai_model,
+            usage_metrics=usage_metrics,
         ).run(question)
 
         if classification.status == "relevant":
@@ -66,6 +71,7 @@ def main() -> int:
             retrieved_chunks = RetrievalService(
                 api_key=api_key,
                 config=retrieval_config,
+                usage_metrics=usage_metrics,
             ).retrieve(classification.normalized_query)
             if retrieved_chunks:
                 print("Chunks recuperados:")
@@ -84,6 +90,7 @@ def main() -> int:
                 api_key=api_key,
                 model=settings.openai_model,
                 sqlite_service=sqlite_service,
+                usage_metrics=usage_metrics,
             ).generate(classification.normalized_query, retrieved_chunks)
             print("\nQuery SQL gerada:")
             print(generation.explanation)
@@ -97,6 +104,7 @@ def main() -> int:
                     api_key=api_key,
                     model=settings.openai_model,
                     sqlite_service=sqlite_service,
+                    usage_metrics=usage_metrics,
                 ).execute(
                     question=classification.normalized_query,
                     sql=generation.sql,
@@ -123,6 +131,7 @@ def main() -> int:
                 answer = LLMResultInterpreterService(
                     api_key=api_key,
                     model=settings.openai_model,
+                    usage_metrics=usage_metrics,
                 ).interpret(question, execution.rows)
                 print("\nResposta:")
                 print(answer)
@@ -134,8 +143,19 @@ def main() -> int:
     except TextToSQLError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1
+    finally:
+        if usage_metrics is not None:
+            _print_usage_metrics(usage_metrics)
 
     return 0
+
+
+def _print_usage_metrics(metrics: UsageMetricsService) -> None:
+    report = metrics.snapshot()
+    if report["total"]["calls"] == 0:
+        return
+    print("\nMétricas de utilização das APIs:")
+    print(json.dumps(report, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

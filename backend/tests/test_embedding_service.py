@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
@@ -6,6 +7,7 @@ from pydantic import ValidationError
 
 from text_to_sql.embeddings import EmbeddingConfig, EmbeddingService, TextEmbedding
 from text_to_sql.errors import EmbeddingError
+from text_to_sql.usage_metrics import UsageMetricsService
 
 
 def test_embedding_service_embeds_texts_in_batches_and_keeps_input_order() -> None:
@@ -75,6 +77,35 @@ def test_embedding_service_uses_default_embedding_model() -> None:
         model="text-embedding-3-small",
         input=["pergunta"],
     )
+
+
+def test_embedding_service_records_usage_for_each_batch() -> None:
+    mock_client = Mock()
+    mock_client.embeddings.create.return_value = Mock(
+        model="text-embedding-3-small",
+        data=[Mock(index=0, embedding=[0.1, 0.2])],
+        usage=SimpleNamespace(prompt_tokens=12, total_tokens=12),
+    )
+    metrics = UsageMetricsService()
+
+    with patch(
+        "text_to_sql.embeddings.embedding_service.OpenAI",
+        return_value=mock_client,
+    ):
+        service = EmbeddingService(
+            api_key="test-key",
+            usage_metrics=metrics,
+            usage_component="query_embeddings",
+        )
+
+    service.embed_texts(["pergunta"])
+
+    component_metrics = metrics.snapshot()["components"]["query_embeddings"]
+    assert component_metrics["calls"] == 1
+    assert component_metrics["input_tokens"] == 12
+    assert component_metrics["output_tokens"] == 0
+    assert component_metrics["total_tokens"] == 12
+    assert component_metrics["unpriced_calls"] == 1
 
 
 def test_embedding_service_returns_empty_list_without_api_call() -> None:

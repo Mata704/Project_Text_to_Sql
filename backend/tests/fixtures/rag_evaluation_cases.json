@@ -1,0 +1,22 @@
+[
+  {
+    "case_id": "arrival-delay-filter",
+    "question": "Como identificar registos de atraso de chegada efetivos?",
+    "expected_sources": [
+      "tables/registos_atraso.md",
+      "README.md"
+    ],
+    "expected_facts": [
+      "tipo_registo = 'Chegada'",
+      "estado = 'Realizada'"
+    ],
+    "should_answer": true
+  },
+  {
+    "case_id": "ticket-prices-not-documented",
+    "question": "Qual é o preço de um bilhete de comboio?",
+    "expected_sources": [],
+    "expected_facts": [],
+    "should_answer": false
+  }
+]

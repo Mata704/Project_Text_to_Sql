@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
@@ -11,6 +12,7 @@ from text_to_sql.llms.llm_selector import (
 )
 from text_to_sql.llms.llm_selector.constants import MAX_CLARIFICATION_ITERATIONS
 from text_to_sql.llms.llm_selector.llm_selector_service import _ConversationContext
+from text_to_sql.usage_metrics import UsageMetricsService
 
 
 def test_first_stage_result_requires_clarification_only_for_ambiguous() -> None:
@@ -79,6 +81,33 @@ def test_classifier_sends_history_and_current_question_without_database_schema()
         {"role": "assistant", "content": "De que comboio e data?"},
         {"role": "user", "content": "IC523, dia 5 de outubro de 2026"},
     ]
+
+
+def test_classifier_records_response_usage_in_the_shared_session() -> None:
+    parsed_result = QuestionClassificationResult(
+        status="relevant",
+        normalized_query="Quantas viagens?",
+    )
+    mock_client = Mock()
+    mock_client.responses.parse.return_value = Mock(
+        output_parsed=parsed_result,
+        model="gpt-4.1-mini",
+        usage=SimpleNamespace(input_tokens=30, output_tokens=5, total_tokens=35),
+    )
+    metrics = UsageMetricsService()
+
+    with patch("text_to_sql.llms.common.OpenAI", return_value=mock_client):
+        selector = LLMSelectorService(
+            api_key="test-key",
+            model="gpt-4.1-mini",
+            usage_metrics=metrics,
+        )
+        selector.classify_question("Quantas viagens?")
+
+    report = metrics.snapshot()
+    assert report["components"]["question_classifier"]["calls"] == 1
+    assert report["components"]["question_classifier"]["total_tokens"] == 35
+    assert report["total"]["calls"] == 1
 
 
 def test_classifier_removes_prompt_injection_terms_from_question_and_history() -> None:

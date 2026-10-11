@@ -3,6 +3,7 @@ from text_to_sql.retrieval.retrieval_model import (
     RetrievalConfig,
     RetrievedChunk,
 )
+from text_to_sql.usage_metrics import UsageMetricsService
 from text_to_sql.vector_store import ChromaDBService
 
 
@@ -14,12 +15,18 @@ class RetrievalService:
         *,
         embedding_service: EmbeddingService | None = None,
         vector_store_service: ChromaDBService | None = None,
+        usage_metrics: UsageMetricsService | None = None,
     ) -> None:
         self.config = config or RetrievalConfig()
         self.embedding_service = (
             embedding_service
             if embedding_service is not None
-            else EmbeddingService(api_key=api_key, config=self.config.embedding)
+            else EmbeddingService(
+                api_key=api_key,
+                config=self.config.embedding,
+                usage_metrics=usage_metrics,
+                usage_component="query_embeddings",
+            )
         )
         self.vector_store_service = (
             vector_store_service

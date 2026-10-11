@@ -18,6 +18,7 @@ from text_to_sql.llms.llm_sql_generator.llm_sql_generator_model import (
 )
 from text_to_sql.retrieval.retrieval_model import RetrievedChunk
 from text_to_sql.sqlite_db import SQLiteService
+from text_to_sql.usage_metrics import UsageMetricsService
 
 
 class LLMSQLGeneratorService:
@@ -26,10 +27,12 @@ class LLMSQLGeneratorService:
         api_key: str,
         model: str = DEFAULT_SQL_GENERATION_MODEL,
         sqlite_service: SQLiteService | None = None,
+        usage_metrics: UsageMetricsService | None = None,
     ) -> None:
         self.client = create_openai_client(api_key)
         self.model = model
         self.sqlite_service = sqlite_service or SQLiteService()
+        self.usage_metrics = usage_metrics
 
     def generate(
         self,
@@ -66,6 +69,8 @@ class LLMSQLGeneratorService:
                     response_model=SQLGenerationResult,
                     action="generate SQL",
                     result_name="SQL generation result",
+                    usage_metrics=self.usage_metrics,
+                    usage_component="sql_generator",
                 )
             except OpenAIRequestError:
                 raise

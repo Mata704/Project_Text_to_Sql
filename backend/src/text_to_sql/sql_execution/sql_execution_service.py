@@ -8,6 +8,7 @@ from text_to_sql.sql_execution.sql_execution_model import (
     SQLiteValue,
 )
 from text_to_sql.sqlite_db import SQLiteService
+from text_to_sql.usage_metrics import UsageMetricsService
 
 MAX_SQL_EXECUTIONS = 3
 
@@ -18,10 +19,12 @@ class SQLExecutionWithRetriesService:
         api_key: str,
         model: str,
         sqlite_service: SQLiteService | None = None,
+        usage_metrics: UsageMetricsService | None = None,
     ) -> None:
         self.api_key = api_key
         self.model = model
         self.sqlite_service = sqlite_service or SQLiteService()
+        self.usage_metrics = usage_metrics
 
     def execute(
         self,
@@ -48,6 +51,7 @@ class SQLExecutionWithRetriesService:
                     api_key=self.api_key,
                     model=self.model,
                     sqlite_service=self.sqlite_service,
+                    usage_metrics=self.usage_metrics,
                 ).repair(
                     question=question,
                     sql=current_sql,

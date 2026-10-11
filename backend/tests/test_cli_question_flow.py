@@ -46,7 +46,12 @@ def test_cli_retrieves_only_relevant_questions(
             return False
 
     class FakeIngestionService:
-        def __init__(self, api_key: str, config: DocumentIngestionConfig) -> None:
+        def __init__(
+            self,
+            api_key: str,
+            config: DocumentIngestionConfig,
+            usage_metrics=None,
+        ) -> None:
             calls.append(({"api_key": api_key, "config": config}, "ingestion-init"))
 
         def run(self):
@@ -54,15 +59,22 @@ def test_cli_retrieves_only_relevant_questions(
             return SimpleNamespace(skipped=True, chunk_count=0)
 
     class FakeSelectorService:
-        def __init__(self, **kwargs: str) -> None:
-            self.kwargs = kwargs
+        def __init__(self, api_key: str, model: str, usage_metrics=None) -> None:
+            self.kwargs = {"api_key": api_key, "model": model}
+            self.usage_metrics = usage_metrics
 
         def run(self, question: str) -> None:
             calls.append((self.kwargs, question))
+            self.usage_metrics.record_call(
+                component="question_classifier",
+                model="test-model",
+                usage=SimpleNamespace(input_tokens=10, output_tokens=2, total_tokens=12),
+                elapsed_seconds=0.01,
+            )
             return SimpleNamespace(status=status, normalized_query="Pergunta normalizada?")
 
     class FakeRetrievalService:
-        def __init__(self, api_key: str, config) -> None:
+        def __init__(self, api_key: str, config, usage_metrics=None) -> None:
             calls.append(({"api_key": api_key, "config": config}, "retrieval-init"))
 
         def retrieve(self, question: str):
@@ -75,7 +87,13 @@ def test_cli_retrieves_only_relevant_questions(
             return [SimpleNamespace(chunk=chunk, score=0.91)]
 
     class FakeSQLGeneratorService:
-        def __init__(self, api_key: str, model: str, sqlite_service) -> None:
+        def __init__(
+            self,
+            api_key: str,
+            model: str,
+            sqlite_service,
+            usage_metrics=None,
+        ) -> None:
             self.sqlite_service = sqlite_service
             calls.append(
                 (
@@ -109,7 +127,7 @@ def test_cli_retrieves_only_relevant_questions(
             )
 
     class FakeResultInterpreterService:
-        def __init__(self, api_key: str, model: str) -> None:
+        def __init__(self, api_key: str, model: str, usage_metrics=None) -> None:
             calls.append(
                 (
                     {"api_key": api_key, "model": model},
@@ -214,7 +232,13 @@ def test_cli_retrieves_only_relevant_questions(
         assert "Foram encontradas 42 viagens." in output
         assert '"total_viagens": 42' not in output
         assert '"state": "Realizada"' in output
+        assert "Métricas de utilização das APIs:" in output
+        assert "question_classifier" in output
+        assert output.index("Foram encontradas 42 viagens.") < output.index(
+            "Métricas de utilização"
+        )
     else:
         assert len(calls) == 4
         assert "Chunks recuperados:" not in output
         assert "Não foram encontradas evidências" not in output
+        assert "Métricas de utilização das APIs:" in output
