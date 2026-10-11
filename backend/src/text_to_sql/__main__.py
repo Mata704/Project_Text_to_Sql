@@ -1,3 +1,9 @@
-from text_to_sql.cli import main
+import uvicorn
 
-raise SystemExit(main())
+
+def main() -> None:
+    uvicorn.run("text_to_sql.api:app", host="127.0.0.1", port=8000)
+
+
+if __name__ == "__main__":
+    main()

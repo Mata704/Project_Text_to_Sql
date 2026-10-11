@@ -15,13 +15,16 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "tiktoken>=0.9.0",
     "chromadb>=1.0.0",
+    "fastapi>=0.143.0",
+    "uvicorn>=0.30",
 ]
 
 [project.scripts]
-text-to-sql = "text_to_sql.cli:main"
+text-to-sql = "text_to_sql.__main__:main"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pre-commit>=4.2.0",
     "pytest>=8.4.0",
     "ruff>=0.12.0",

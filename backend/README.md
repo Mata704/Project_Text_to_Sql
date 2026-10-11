@@ -1,7 +1,6 @@
 # Text to SQL - Backend
 
-Backend Text-to-SQL. Nesta fase, o percurso funciona pela linha de comandos;
-a API FastAPI será adicionada depois de validado o comportamento do backend.
+Backend Text-to-SQL exposto por uma API FastAPI (`GET /health` e `POST /chat`).
 
 ## Requisitos
 
@@ -319,13 +318,22 @@ Bash:
 uv run text-to-sql
 ```
 
-O comando inicia sem receber a pergunta como argumento; a CLI pede-a no
-terminal e depois classifica e normaliza a pergunta. A primeira LLM devolve um
-objeto estruturado com `status` (`relevant`, `irrelevant` ou `ambiguous`),
+O comando arranca a API FastAPI em `http://127.0.0.1:8000`. No arranque,
+sincroniza a base SQLite de exemplo e a documentação RAG; se isso falhar, o
+servidor não arranca.
+
+- `GET /health` devolve `{"status": "ok"}`.
+- `POST /chat` recebe `{"question": "..."}` e devolve o JSON descrito acima.
+  Responde `200` quando há resposta (incluindo fora do âmbito e pedidos de
+  clarificação) e `422` quando há `error` (pergunta vazia, ou falha da geração
+  ou execução SQL após as tentativas).
+
+Cada pedido ao `/chat` é independente: o classificador devolve um objeto
+estruturado com `status` (`relevant`, `irrelevant` ou `ambiguous`),
 `normalized_query` e `clarification_question`. Só perguntas relevantes seguem
-para retrieval, geração SQL e consulta SQLite; pedidos ambíguos solicitam
-clarificação. A CLI conserva até cinco trocas de clarificação como contexto e
-limita a cinco iterações por pergunta.
+para retrieval, geração SQL e consulta SQLite; num pedido ambíguo a resposta é
+a pergunta de clarificação e o cliente envia nova pergunta em novo pedido. Só o
+classificador faz perguntas ao utilizador.
 As instruções do selector tratam a pergunta e o histórico como conteúdo não
 fiável e limitam o modelo à classificação ferroviária. Um filtro regex remove
 expressões comuns de tentativa de alteração ou revelação do prompt antes de
@@ -393,7 +401,11 @@ uv run --project backend pre-commit run --all-files
 
 ```text
 src/text_to_sql/
-├── cli.py                    # Entrada interativa e ciclo de clarificação
+├── __main__.py               # Arranque do servidor (uvicorn)
+├── chat_pipeline.py          # Percurso relevante: retrieval, SQL, execução, interpretação
+├── api/
+│   ├── server.py             # App FastAPI: /health e /chat
+│   └── chat.py               # Arranque (BD + RAG) e orquestração de um pedido
 ├── config.py                 # Configuração OpenAI
 ├── errors.py                 # Erros de configuração e LLM
 ├── chunking/
@@ -453,12 +465,12 @@ src/text_to_sql/
         └── llm_result_interpreter_service.py # Resultados SQL para linguagem natural
 ```
 
-A base SQLite de exemplo fica em `data/` e é sincronizada no arranque da CLI.
+A base SQLite de exemplo fica em `data/` e é sincronizada no arranque da API.
 A recuperação RAG, a geração e execução SQL e a reparação limitada de queries
-estão ligadas ao percurso do CLI. FastAPI e frontend serão adicionados nas
-fases seguintes.
+estão ligadas ao endpoint `POST /chat`. O frontend será adicionado numa fase
+seguinte.
 
-O percurso da CLI sincroniza a documentação com a vector store, classifica e
-clarifica a pergunta com a OpenAI e, apenas para perguntas relevantes, recupera
-evidências, gera SQL fundamentado, consulta a base SQLite em modo somente de
-leitura e interpreta o resultado em linguagem natural.
+O endpoint `/chat` classifica a pergunta com a OpenAI e, apenas para perguntas
+relevantes, recupera evidências, gera SQL fundamentado, consulta a base SQLite
+em modo somente de leitura e interpreta o resultado em linguagem natural. A
+documentação RAG é sincronizada com a vector store no arranque.

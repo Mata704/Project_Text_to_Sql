@@ -1,11 +1,32 @@
-import json
 from types import SimpleNamespace
 
 import pytest
+from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
-from text_to_sql.cli import main
+from text_to_sql.api import create_app
 from text_to_sql.document_ingestion import DocumentIngestionConfig
+
+
+def _post_chat(question: str) -> tuple[int, dict]:
+    with TestClient(create_app()) as client:
+        reply = client.post("/chat", json={"question": question})
+    return reply.status_code, reply.json()
+
+
+def test_health_returns_ok(monkeypatch) -> None:
+    monkeypatch.setattr("text_to_sql.api.server.prepare_runtime", lambda: None)
+    with TestClient(create_app()) as client:
+        reply = client.get("/health")
+    assert reply.status_code == 200
+    assert reply.json() == {"status": "ok"}
+
+
+def test_chat_rejects_empty_question(monkeypatch) -> None:
+    monkeypatch.setattr("text_to_sql.api.server.prepare_runtime", lambda: None)
+    with TestClient(create_app()) as client:
+        assert client.post("/chat", json={"question": "   "}).status_code == 422
+        assert client.post("/chat", json={}).status_code == 422
 
 
 @pytest.mark.parametrize(
@@ -18,7 +39,6 @@ from text_to_sql.document_ingestion import DocumentIngestionConfig
 )
 def test_cli_retrieves_only_relevant_questions(
     monkeypatch,
-    capsys,
     status: str,
     should_retrieve: bool,
 ) -> None:
@@ -160,15 +180,15 @@ def test_cli_retrieves_only_relevant_questions(
             return "Foram encontradas 42 viagens."
 
     monkeypatch.setattr(
-        "text_to_sql.cli.DocumentIngestionService",
+        "text_to_sql.api.chat.DocumentIngestionService",
         FakeIngestionService,
     )
     monkeypatch.setattr(
-        "text_to_sql.cli.SampleDatabaseService",
+        "text_to_sql.api.chat.SampleDatabaseService",
         FakeSampleDatabaseService,
     )
     monkeypatch.setattr(
-        "text_to_sql.cli.Settings",
+        "text_to_sql.api.chat.Settings",
         lambda: SimpleNamespace(
             openai_api_key=SecretStr("test-key"),
             openai_model="test-model",
@@ -176,25 +196,25 @@ def test_cli_retrieves_only_relevant_questions(
         ),
     )
     monkeypatch.setattr(
-        "text_to_sql.cli.LLMSelectorService",
+        "text_to_sql.api.chat.LLMSelectorService",
         FakeSelectorService,
     )
     monkeypatch.setattr(
-        "text_to_sql.cli_pipeline.RetrievalService",
+        "text_to_sql.chat_pipeline.RetrievalService",
         FakeRetrievalService,
     )
     monkeypatch.setattr(
-        "text_to_sql.cli_pipeline.LLMSQLGeneratorService",
+        "text_to_sql.chat_pipeline.LLMSQLGeneratorService",
         FakeSQLGeneratorService,
     )
     monkeypatch.setattr(
-        "text_to_sql.cli_pipeline.LLMResultInterpreterService",
+        "text_to_sql.chat_pipeline.LLMResultInterpreterService",
         FakeResultInterpreterService,
     )
-    monkeypatch.setattr("text_to_sql.cli_pipeline.SQLiteService", FakeSQLiteService)
-    monkeypatch.setattr("builtins.input", lambda _prompt: "Quantas viagens?")
+    monkeypatch.setattr("text_to_sql.chat_pipeline.SQLiteService", FakeSQLiteService)
 
-    assert main() == 0
+    status_code, response = _post_chat("Quantas viagens?")
+    assert status_code == 200
     assert calls[0] == ({}, "database-ensure")
     assert calls[1][0]["api_key"] == "test-key"
     assert calls[1][0]["config"].embedding.model == "test-embedding-model"
@@ -205,7 +225,6 @@ def test_cli_retrieves_only_relevant_questions(
         "Quantas viagens?",
     )
     assert calls[3] == selector_call
-    response = json.loads(capsys.readouterr().out)
     assert ("retrieval-init" in [call[1] for call in calls]) is should_retrieve
     if should_retrieve:
         assert calls[4][0]["api_key"] == "test-key"
@@ -268,16 +287,7 @@ def test_cli_retrieves_only_relevant_questions(
         )
 
 
-def test_cli_includes_sqlite_failure_reason_in_response_and_logs(
-    monkeypatch,
-    capsys,
-) -> None:
-    from types import SimpleNamespace
-
-    from pydantic import SecretStr
-
-    from text_to_sql.cli import main
-
+def test_chat_includes_sqlite_failure_reason_in_response_and_logs(monkeypatch) -> None:
     question = "Qual o combóio com maior atraso?"
     sqlite_error = "Could not read from SQLite: no such column: atraso"
 
@@ -334,7 +344,7 @@ def test_cli_includes_sqlite_failure_reason_in_response_and_logs(
             )
 
     monkeypatch.setattr(
-        "text_to_sql.cli.Settings",
+        "text_to_sql.api.chat.Settings",
         lambda: SimpleNamespace(
             openai_api_key=SecretStr("test-key"),
             openai_model="test-model",
@@ -342,22 +352,21 @@ def test_cli_includes_sqlite_failure_reason_in_response_and_logs(
         ),
     )
     monkeypatch.setattr(
-        "text_to_sql.cli.SampleDatabaseService",
+        "text_to_sql.api.chat.SampleDatabaseService",
         lambda: SimpleNamespace(ensure_current=lambda: False),
     )
-    monkeypatch.setattr("text_to_sql.cli.DocumentIngestionService", FakeIngestionService)
-    monkeypatch.setattr("text_to_sql.cli.LLMSelectorService", FakeSelectorService)
-    monkeypatch.setattr("text_to_sql.cli_pipeline.RetrievalService", FakeRetrievalService)
-    monkeypatch.setattr("text_to_sql.cli_pipeline.SQLiteService", FakeSQLiteService)
-    monkeypatch.setattr("text_to_sql.cli_pipeline.LLMSQLGeneratorService", FakeSQLGeneratorService)
+    monkeypatch.setattr("text_to_sql.api.chat.DocumentIngestionService", FakeIngestionService)
+    monkeypatch.setattr("text_to_sql.api.chat.LLMSelectorService", FakeSelectorService)
+    monkeypatch.setattr("text_to_sql.chat_pipeline.RetrievalService", FakeRetrievalService)
+    monkeypatch.setattr("text_to_sql.chat_pipeline.SQLiteService", FakeSQLiteService)
+    monkeypatch.setattr("text_to_sql.chat_pipeline.LLMSQLGeneratorService", FakeSQLGeneratorService)
     monkeypatch.setattr(
-        "text_to_sql.cli_pipeline.SQLExecutionWithRetriesService",
+        "text_to_sql.chat_pipeline.SQLExecutionWithRetriesService",
         FakeSQLExecutionService,
     )
-    monkeypatch.setattr("builtins.input", lambda _prompt: question)
 
-    assert main() == 1
-    response = json.loads(capsys.readouterr().out)
+    status_code, response = _post_chat(question)
+    assert status_code == 422
 
     assert response["question"] == question
     assert response["answer"] is None

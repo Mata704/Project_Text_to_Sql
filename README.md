@@ -27,7 +27,9 @@ uv run text-to-sql
 ```
 
 O programa classifica a pergunta e, quando relevante, usa RAG para gerar e
-executar uma query SQLite somente de leitura. Se a execução falhar, o backend
+executar uma query SQLite somente de leitura. Expõe uma API FastAPI em
+`http://127.0.0.1:8000` com `GET /health` e `POST /chat` (corpo
+`{"question": "..."}`). Se a execução falhar, o backend
 tenta repará-la com uma LLM até ao limite de três execuções no total. Consulte
 [backend/README.md](./backend/README.md) para detalhes.
 
