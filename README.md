@@ -26,9 +26,9 @@ Configure `OPENAI_API_KEY` em `backend/.env` e execute o backend:
 uv run text-to-sql
 ```
 
-Na fase atual, o programa pede a pergunta, executa apenas a primeira LLM,
-imprime a classificação estruturada e termina sem consultar a base de dados.
-O SQLite de exemplo é mantido para uma fase posterior. Consulte
+O programa classifica a pergunta e, quando relevante, usa RAG para gerar e
+executar uma query SQLite somente de leitura. Se a execução falhar, o backend
+tenta repará-la com uma LLM até ao limite de três execuções no total. Consulte
 [backend/README.md](./backend/README.md) para detalhes.
 
 Testes e lint, a partir de `backend/`:

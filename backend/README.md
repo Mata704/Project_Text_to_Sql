@@ -202,12 +202,26 @@ O serviço apenas recupera evidências; geração de resposta fundamentada nessa
 evidências é feita por `LLMSQLGeneratorService`, em `llms/llm_sql_generator/`.
 O gerador recebe a pergunta normalizada e os chunks recuperados, produz uma
 resposta estruturada com uma query SQLite `SELECT`, parâmetros nomeados como
-uma lista de objetos `{name, value}` e citações, ou abstém-se quando as
-evidências não chegam. Valida que os placeholders correspondem exatamente aos
-parâmetros e que as citações apontam para chunks recebidos e excertos do
-conteúdo original. O CLI apresenta o SQL e os parâmetros e executa a query
-através do `SQLiteService` em modo somente de leitura; depois imprime as linhas
-de resultado ou indica que a query não devolveu resultados.
+uma lista de objetos `{name, value}` e citações. Valida que os placeholders
+correspondem exatamente aos parâmetros e que as citações apontam para chunks
+recebidos e excertos do conteúdo original. Se a resposta não contiver query ou
+falhar a validação estrutural, de citações ou do SQLite, o gerador tenta
+novamente até três vezes, enviando o motivo da rejeição à LLM. Se nenhuma
+tentativa produzir uma query segura, ou não houver evidências, devolve a
+mensagem para reformular a pergunta. Antes de devolver o SQL, o gerador valida-o
+com o SQLite usando `EXPLAIN QUERY PLAN` numa ligação somente de leitura. O CLI
+executa a query através de `SQLExecutionWithRetriesService`, em
+`sql_execution/`. Esse serviço executa a query pelo `SQLiteService` e, se
+falhar, chama `LLMSQLRepairService`, em `llms/llm_sql_repair/`, que recebe a
+pergunta, SQL anterior, parâmetros, erro e evidências e propõe uma query
+corrigida. Cada query reparada também tem de ser um único `SELECT`, passar as
+validações estruturais e ser aceite pelo SQLite antes de poder ser executada.
+O serviço permite no máximo três execuções no total (a original e até duas
+reparações); se todas falharem, devolve um resultado sem sucesso e a CLI pede
+ao utilizador que reformule a pergunta. Depois da execução SQL bem-sucedida, o CLI chama
+`LLMResultInterpreterService`, em `llms/llm_result_interpreter/`, com a pergunta
+original e as linhas devolvidas. O serviço transforma esses dados numa resposta
+em linguagem natural, sem acrescentar factos que não estejam nos resultados.
 
 ```python
 from text_to_sql.llms import LLMSQLGeneratorService
@@ -248,17 +262,12 @@ uv run text-to-sql
 ```
 
 O comando inicia sem receber a pergunta como argumento; a CLI pede-a no
-terminal e só depois chama a primeira LLM.
-
-Nesta fase, a CLI apenas classifica e normaliza a pergunta, imprime o resultado
-estruturado e termina. Não abre a base SQLite, não gera SQL e não consulta dados.
-
-Como resultado, a primeira LLM devolve um objeto estruturado com
-`status` (`relevant`, `irrelevant` ou `ambiguous`), `normalized_query` e
-`clarification_question`. A classificação é impressa e a execução termina para
-pedidos relevantes ou irrelevantes; pedidos ambíguos solicitam clarificação. A
-CLI conserva até cinco trocas de clarificação como contexto e limita a cinco
-iterações por pergunta.
+terminal e depois classifica e normaliza a pergunta. A primeira LLM devolve um
+objeto estruturado com `status` (`relevant`, `irrelevant` ou `ambiguous`),
+`normalized_query` e `clarification_question`. Só perguntas relevantes seguem
+para retrieval, geração SQL e consulta SQLite; pedidos ambíguos solicitam
+clarificação. A CLI conserva até cinco trocas de clarificação como contexto e
+limita a cinco iterações por pergunta.
 As instruções do selector tratam a pergunta e o histórico como conteúdo não
 fiável e limitam o modelo à classificação ferroviária. Um filtro regex remove
 expressões comuns de tentativa de alteração ou revelação do prompt antes de
@@ -349,6 +358,9 @@ src/text_to_sql/
 │   ├── constants.py          # Caminho predefinido da base SQLite
 │   ├── sqlite_db_model.py    # Configuração e resultado de escrita
 │   └── sqlite_db_service.py  # Queries de leitura e escrita transacional
+├── sql_execution/
+│   ├── sql_execution_model.py   # Resultado da execução e parâmetros
+│   └── sql_execution_service.py # Execução SQL e reparação com limite de tentativas
 ├── sample_database/
 │   ├── constants.py          # Schema e dados fixos de demonstração
 │   └── sample_database_service.py # Criação e sincronização da base de exemplo
@@ -361,17 +373,26 @@ src/text_to_sql/
     │   ├── constants.py             # Modelo, instruções e limite de clarificação
     │   ├── llm_selector_service.py # Prompt, chamada OpenAI e fluxo de clarificações
     │   └── llm_selector_model.py   # Modelos Pydantic usados pelo selector
-    └── llm_sql_generator/
+    ├── llm_sql_generator/
+    │   ├── constants.py                   # Instruções e modelo predefinido
+    │   ├── llm_sql_generator_model.py     # Resultado SQL estruturado e citações
+    │   └── llm_sql_generator_service.py   # Geração SQL fundamentada no retrieval
+    ├── llm_sql_repair/
+    │   ├── constants.py                   # Instruções e modelo predefinido
+    │   ├── llm_sql_repair_model.py        # Query SELECT estruturada para reparação
+    │   └── llm_sql_repair_service.py      # Reparação limitada de queries com erro
+    └── llm_result_interpreter/
         ├── constants.py                   # Instruções e modelo predefinido
-        ├── llm_sql_generator_model.py     # Resultado SQL estruturado e citações
-        └── llm_sql_generator_service.py   # Geração SQL fundamentada no retrieval
+        ├── llm_result_interpreter_model.py # Resposta interpretada estruturada
+        └── llm_result_interpreter_service.py # Resultados SQL para linguagem natural
 ```
 
 A base SQLite de exemplo fica em `data/` e é sincronizada no arranque da CLI.
-A recuperação RAG e a geração SQL já estão ligadas ao percurso do CLI. A
-execução do SQL na base SQLite, FastAPI e frontend serão adicionados nas fases
-seguintes.
+A recuperação RAG, a geração e execução SQL e a reparação limitada de queries
+estão ligadas ao percurso do CLI. FastAPI e frontend serão adicionados nas
+fases seguintes.
 
 O percurso da CLI sincroniza a documentação com a vector store, classifica e
 clarifica a pergunta com a OpenAI e, apenas para perguntas relevantes, recupera
-evidências e gera SQL fundamentado sem o executar.
+evidências, gera SQL fundamentado, consulta a base SQLite em modo somente de
+leitura e interpreta o resultado em linguagem natural.

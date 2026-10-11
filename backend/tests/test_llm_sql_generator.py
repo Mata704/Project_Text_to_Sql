@@ -72,7 +72,7 @@ def test_sql_generator_returns_structured_sql_and_validates_citation(capsys) -> 
     assert "Validação do LLM SQL Generator: query SELECT confirmada." in capsys.readouterr().out
 
 
-def test_sql_generator_returns_abstention_without_evidence() -> None:
+def test_sql_generator_uses_same_failure_when_there_is_no_evidence() -> None:
     mock_client = Mock()
     with patch(
         "text_to_sql.llms.llm_sql_generator.llm_sql_generator_service.OpenAI",
@@ -80,11 +80,8 @@ def test_sql_generator_returns_abstention_without_evidence() -> None:
     ):
         service = LLMSQLGeneratorService(api_key="test-key")
 
-    result = service.generate("Quantas viagens existem?", [])
-
-    assert result.answerable is False
-    assert result.sql is None
-    assert result.citations == []
+    with pytest.raises(LLMError, match="Não foi possível gerar uma query SQL segura"):
+        service.generate("Quantas viagens existem?", [])
     mock_client.responses.parse.assert_not_called()
 
 
@@ -135,10 +132,10 @@ def test_sql_generator_rejects_non_select_response_from_model() -> None:
     ):
         service = LLMSQLGeneratorService(api_key="test-key")
 
-    with pytest.raises(LLMError, match="invalid SQL generation result"):
+    with pytest.raises(LLMError, match="Não foi possível gerar uma query SQL segura"):
         service.generate("Quantas viagens existem?", _evidence())
 
-    mock_client.responses.parse.assert_called_once()
+    assert mock_client.responses.parse.call_count == 3
 
 
 def test_sql_generator_rejects_invalid_sqlite_query() -> None:
@@ -171,13 +168,86 @@ def test_sql_generator_rejects_invalid_sqlite_query() -> None:
             sqlite_service=sqlite_service,
         )
 
-    with pytest.raises(LLMError, match="invalid SQL query"):
+    with pytest.raises(LLMError, match="Não foi possível gerar uma query SQL segura"):
         service.generate("Quantas viagens existem?", _evidence())
 
+    assert sqlite_service.validate_select.call_count == 3
+    assert mock_client.responses.parse.call_count == 3
+
+
+def test_sql_generator_retries_unsafe_query_and_returns_safe_replacement(capsys) -> None:
+    mock_client = Mock()
+    mock_client.responses.parse.side_effect = [
+        Mock(
+            output_parsed={
+                "answerable": True,
+                "sql": "DELETE FROM viagens",
+                "parameters": [],
+                "explanation": "Consulta.",
+                "citations": [
+                    {
+                        "source": "01-schema.md",
+                        "chunk_id": "schema-1",
+                        "quote": "A tabela viagens contém a data_viagem.",
+                    }
+                ],
+            }
+        ),
+        Mock(output_parsed=_result()),
+    ]
+    sqlite_service = Mock(spec=SQLiteService)
+    with patch(
+        "text_to_sql.llms.llm_sql_generator.llm_sql_generator_service.OpenAI",
+        return_value=mock_client,
+    ):
+        service = LLMSQLGeneratorService(
+            api_key="test-key",
+            sqlite_service=sqlite_service,
+        )
+
+    result = service.generate("Quantas viagens existem?", _evidence())
+
+    assert result.sql == "SELECT COUNT(*) FROM viagens;"
+    assert mock_client.responses.parse.call_count == 2
+    assert (
+        "nova resposta completa"
+        in (mock_client.responses.parse.call_args_list[1].kwargs["input"][0]["content"])
+    )
     sqlite_service.validate_select.assert_called_once_with(
-        "SELECT coluna_inexistente FROM viagens",
+        "SELECT COUNT(*) FROM viagens;",
         {},
     )
+    assert "query SELECT confirmada" in capsys.readouterr().out
+
+
+def test_sql_generator_retries_unanswerable_response_and_returns_safe_query() -> None:
+    mock_client = Mock()
+    mock_client.responses.parse.side_effect = [
+        Mock(
+            output_parsed={
+                "answerable": False,
+                "sql": None,
+                "parameters": [],
+                "explanation": "A primeira resposta não tinha query.",
+                "citations": [],
+            }
+        ),
+        Mock(output_parsed=_result()),
+    ]
+    sqlite_service = Mock(spec=SQLiteService)
+    with patch(
+        "text_to_sql.llms.llm_sql_generator.llm_sql_generator_service.OpenAI",
+        return_value=mock_client,
+    ):
+        service = LLMSQLGeneratorService(
+            api_key="test-key",
+            sqlite_service=sqlite_service,
+        )
+
+    result = service.generate("Quantas viagens existem?", _evidence())
+
+    assert result.sql == "SELECT COUNT(*) FROM viagens;"
+    assert mock_client.responses.parse.call_count == 2
 
 
 def test_sql_generation_result_requires_parameters_for_named_placeholders() -> None:
@@ -248,8 +318,9 @@ def test_sql_generator_rejects_unknown_citation() -> None:
     ):
         service = LLMSQLGeneratorService(api_key="test-key")
 
-    with pytest.raises(LLMError, match="cited unknown evidence"):
+    with pytest.raises(LLMError, match="Não foi possível gerar uma query SQL segura"):
         service.generate("Quantas viagens existem?", _evidence())
+    assert mock_client.responses.parse.call_count == 3
 
 
 def test_sql_generator_rejects_quote_not_present_in_cited_chunk() -> None:
@@ -273,5 +344,6 @@ def test_sql_generator_rejects_quote_not_present_in_cited_chunk() -> None:
     ):
         service = LLMSQLGeneratorService(api_key="test-key")
 
-    with pytest.raises(LLMError, match="quote that is not present"):
+    with pytest.raises(LLMError, match="Não foi possível gerar uma query SQL segura"):
         service.generate("Quantas viagens existem?", _evidence())
+    assert mock_client.responses.parse.call_count == 3

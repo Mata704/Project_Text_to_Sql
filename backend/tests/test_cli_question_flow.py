@@ -108,6 +108,19 @@ def test_cli_retrieves_only_relevant_questions(
                 ],
             )
 
+    class FakeResultInterpreterService:
+        def __init__(self, api_key: str, model: str) -> None:
+            calls.append(
+                (
+                    {"api_key": api_key, "model": model},
+                    "result-interpreter-init",
+                )
+            )
+
+        def interpret(self, question: str, rows: list[dict[str, object]]) -> str:
+            calls.append(({"rows": rows}, question))
+            return "Foram encontradas 42 viagens."
+
     monkeypatch.setattr(
         "text_to_sql.cli.DocumentIngestionService",
         FakeIngestionService,
@@ -135,6 +148,10 @@ def test_cli_retrieves_only_relevant_questions(
     monkeypatch.setattr(
         "text_to_sql.cli.LLMSQLGeneratorService",
         FakeSQLGeneratorService,
+    )
+    monkeypatch.setattr(
+        "text_to_sql.cli.LLMResultInterpreterService",
+        FakeResultInterpreterService,
     )
     monkeypatch.setattr("text_to_sql.cli.SQLiteService", FakeSQLiteService)
     monkeypatch.setattr("builtins.input", lambda _prompt: "Quantas viagens?")
@@ -185,8 +202,17 @@ def test_cli_retrieves_only_relevant_questions(
             },
             "sqlite-fetch",
         )
+        assert calls[10] == (
+            {"api_key": "test-key", "model": "test-model"},
+            "result-interpreter-init",
+        )
+        assert calls[11] == (
+            {"rows": [{"total_viagens": 42}]},
+            "Quantas viagens?",
+        )
         assert "SELECT COUNT(*) FROM viagens;" in output
-        assert '"total_viagens": 42' in output
+        assert "Foram encontradas 42 viagens." in output
+        assert '"total_viagens": 42' not in output
         assert '"state": "Realizada"' in output
     else:
         assert len(calls) == 4
