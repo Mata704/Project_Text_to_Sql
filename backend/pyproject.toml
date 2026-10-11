@@ -36,6 +36,9 @@ packages = ["src/text_to_sql"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "."]
+markers = [
+    "integration: requires the OpenAI API and the local ChromaDB index",
+]
 
 [tool.ruff]
 line-length = 100

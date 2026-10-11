@@ -278,6 +278,46 @@ O relatório
 compara `top_k`, thresholds e tamanhos de chunk para os casos do fixture; mede
 retrieval e não geração de respostas end-to-end.
 
+### Gerar um relatório atualizado de avaliação RAG
+
+1. No PowerShell, entre na pasta do backend e instale as dependências:
+
+```powershell
+Set-Location backend
+uv sync
+```
+
+2. Configure `OPENAI_API_KEY` em `backend/.env`. Se ainda não existir, crie o
+   ficheiro a partir do exemplo:
+
+```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+```
+
+3. Ative explicitamente a avaliação live e execute o teste. O comando abaixo
+   desativa a variável no fim e preserva o código de saída do pytest:
+
+```powershell
+$env:RUN_LIVE_RAG_EVALUATION = "1"
+uv run pytest tests/test_rag_evaluation_report.py -m integration -s
+$testExitCode = $LASTEXITCODE
+Remove-Item Env:RUN_LIVE_RAG_EVALUATION
+if ($testExitCode -ne 0) { exit $testExitCode }
+```
+
+O teste sincroniza a documentação com o índice Chroma local, gera embeddings
+para as perguntas do fixture e grava as tabelas atualizadas em
+[`reports/rag-evaluation-latest.md`](reports/rag-evaluation-latest.md). Requer
+acesso à API OpenAI e pode ter custos de embeddings; não gera respostas com
+LLM. Sem `RUN_LIVE_RAG_EVALUATION=1`, este teste é ignorado e não faz chamadas
+externas.
+
+Para correr apenas os testes unitários offline das métricas:
+
+```powershell
+uv run pytest tests/test_rag_evaluation_service.py
+```
+
 ## Resposta JSON e logs da interação
 
 A CLI escreve um único objeto JSON em `stdout`, adequado para integração

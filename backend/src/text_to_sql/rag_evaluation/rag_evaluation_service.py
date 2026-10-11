@@ -55,6 +55,17 @@ class RAGEvaluationResult(BaseModel):
     context_tokens: int = Field(ge=0)
 
 
+class RAGEvaluationRetrievalResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    case_id: str
+    retrieval_source_precision: float | None = Field(default=None, ge=0, le=1)
+    retrieval_source_recall: float | None = Field(default=None, ge=0, le=1)
+    retrieval_mrr: float | None = Field(default=None, ge=0, le=1)
+    latency_ms: float = Field(ge=0)
+    context_tokens: int = Field(ge=0)
+
+
 class RAGEvaluationService:
     """Calculates reference-based RAG metrics for offline test runs."""
 
@@ -113,6 +124,55 @@ class RAGEvaluationService:
             "answerability_correct",
             "citation_validity",
             "citation_source_recall",
+            "latency_ms",
+            "context_tokens",
+        )
+        summary = {}
+        for metric in metric_names:
+            values = [value for result in results if (value := getattr(result, metric)) is not None]
+            summary[metric] = mean(values) if values else None
+        return summary
+
+    def evaluate_retrieval(
+        self,
+        case: RAGEvaluationCase,
+        retrieved_chunks: Sequence[RetrievedChunk],
+        *,
+        latency_ms: float,
+    ) -> RAGEvaluationRetrievalResult:
+        if not isfinite(latency_ms) or latency_ms < 0:
+            raise ValueError("Evaluation latency must be finite and non-negative.")
+
+        retrieved_sources = [
+            str(item.chunk.metadata.get("source", UNKNOWN_SOURCE)) for item in retrieved_chunks
+        ]
+        unique_retrieved_sources = set(retrieved_sources)
+        return RAGEvaluationRetrievalResult(
+            case_id=case.case_id,
+            retrieval_source_precision=self._source_precision(
+                unique_retrieved_sources,
+                case.expected_sources,
+            ),
+            retrieval_source_recall=self._source_recall(
+                unique_retrieved_sources,
+                case.expected_sources,
+            ),
+            retrieval_mrr=self._source_mrr(retrieved_sources, case.expected_sources),
+            latency_ms=latency_ms,
+            context_tokens=self._context_token_count(retrieved_chunks),
+        )
+
+    def summarize_retrieval(
+        self,
+        results: Sequence[RAGEvaluationRetrievalResult],
+    ) -> dict[str, float | None]:
+        if not results:
+            raise ValueError("At least one RAG retrieval evaluation result is required.")
+
+        metric_names = (
+            "retrieval_source_precision",
+            "retrieval_source_recall",
+            "retrieval_mrr",
             "latency_ms",
             "context_tokens",
         )

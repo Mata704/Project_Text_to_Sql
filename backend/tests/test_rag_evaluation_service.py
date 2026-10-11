@@ -95,6 +95,37 @@ def test_rag_evaluation_measures_retrieval_precision_and_rank() -> None:
     assert result.citation_source_recall == 0.5
 
 
+def test_rag_retrieval_evaluation_summarizes_only_labeled_cases() -> None:
+    service = RAGEvaluationService()
+    supported_case = RAGEvaluationCase(
+        case_id="supported",
+        question="Qual o estado?",
+        expected_sources=("tables/viagens.md",),
+        expected_facts=("Realizada",),
+        should_answer=True,
+    )
+    unsupported_case = RAGEvaluationCase(
+        case_id="unsupported",
+        question="Qual o preço?",
+        should_answer=False,
+    )
+    supported = service.evaluate_retrieval(
+        supported_case,
+        [_retrieved("tables/viagens.md", "Realizada", "trips-001")],
+        latency_ms=10,
+    )
+    unsupported = service.evaluate_retrieval(unsupported_case, [], latency_ms=30)
+
+    summary = service.summarize_retrieval([supported, unsupported])
+
+    assert summary["retrieval_source_precision"] == 1.0
+    assert summary["retrieval_source_recall"] == 1.0
+    assert summary["retrieval_mrr"] == 1.0
+    assert summary["latency_ms"] == 20.0
+    with pytest.raises(ValueError, match="At least one"):
+        service.summarize_retrieval([])
+
+
 def test_rag_evaluation_scores_a_no_reference_question_as_unanswerable() -> None:
     service = RAGEvaluationService()
     cases = [
