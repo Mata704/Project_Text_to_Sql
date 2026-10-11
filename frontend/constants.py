@@ -5,6 +5,7 @@ APP_TITLE = "Comboios Pedro Mata"
 ASSETS_DIR = Path(__file__).parent / "assets"
 LOGO_WIDE = str(ASSETS_DIR / "logo_wide.png")
 LOGO_SQUARE = str(ASSETS_DIR / "logo_square.png")
+DIAGRAM_IMAGE = str(ASSETS_DIR / "diagram.png")
 
 PAGE_HOME = "views/home.py"
 PAGE_CHAT = "views/chat.py"

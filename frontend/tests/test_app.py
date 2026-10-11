@@ -19,6 +19,14 @@ def test_home_page_renders(app) -> None:
     assert len(app.chat_input) == 1
 
 
+def test_about_button_opens_project_info(app) -> None:
+    app.button[0].click().run()
+
+    assert not app.exception
+    assert [s.value for s in app.subheader] == ["Sumário", "Diagrama"]
+    assert any("Pedro Mata" in m.value for m in app.markdown)
+
+
 def test_first_question_opens_chat_with_answer(app) -> None:
     app.chat_input[0].set_value("olá").run()
 
