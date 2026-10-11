@@ -1,6 +1,9 @@
 # Viagens
 
-Viagens entre duas estações numa data. `estacoes` é juntada uma vez para a
+## Viagens entre duas estações numa data
+
+Perguntas típicas: «que comboios há de Lisboa para o Porto no dia X?»,
+«horários de partida e chegada entre duas estações». Viagens entre duas estações numa data. `estacoes` é juntada uma vez para a
 origem e outra para o destino.
 
 ```sql

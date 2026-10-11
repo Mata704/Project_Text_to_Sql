@@ -242,7 +242,8 @@ def test_distinct_train_count_example_counts_realized_train_ids(
         item
         for item in examples
         if item["question"]
-        == "Quantos comboios diferentes realizaram viagens entre 1 e 8 de outubro de 2026?"
+        == "Quantos comboios diferentes realizaram viagens entre 1 e 8 de outubro de 2026, "
+        "incluindo o dia 1 e excluindo o dia 8?"
     )
     database_path = tmp_path / "sample.sqlite3"
     SampleDatabaseService(database_path).ensure_current()
@@ -277,7 +278,8 @@ def test_suppressed_trip_percentage_uses_all_trips_as_denominator(
         item
         for item in examples
         if item["question"]
-        == "Que percentagem das viagens foi suprimida entre 1 e 8 de outubro de 2026?"
+        == "Que percentagem das viagens foi suprimida entre 1 e 8 de outubro de 2026, "
+        "incluindo o dia 1 e excluindo o dia 8?"
     )
     database_path = tmp_path / "sample.sqlite3"
     SampleDatabaseService(database_path).ensure_current()
@@ -316,7 +318,7 @@ def test_conditional_status_counts_match_grouped_status_reference(
         if item["question"]
         == (
             "Quantas viagens realizadas, planeadas e suprimidas houve por dia "
-            "entre 1 e 8 de outubro de 2026?"
+            "entre 1 e 8 de outubro de 2026, incluindo o dia 1 e excluindo o dia 8?"
         )
     )
     database_path = tmp_path / "sample.sqlite3"

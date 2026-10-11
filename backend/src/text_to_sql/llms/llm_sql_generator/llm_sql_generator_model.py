@@ -44,6 +44,11 @@ class SQLGenerationResult(BaseModel):
             if not self.citations:
                 raise ValueError("An answerable result must include at least one citation.")
             placeholders = set(re.findall(r"(?<!:):([A-Za-z_]\w*)", normalized_sql))
+            # Parâmetros não usados no SQL são inofensivos e descartados.
+            used_parameters = [p for p in self.parameters if p.name in placeholders]
+            if len(used_parameters) != len(self.parameters):
+                object.__setattr__(self, "parameters", used_parameters)
+                parameter_names = [parameter.name for parameter in used_parameters]
             if placeholders != set(parameter_names):
                 raise ValueError(
                     "SQL named placeholders must exactly match the supplied parameters."

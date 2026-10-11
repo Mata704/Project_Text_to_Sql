@@ -88,7 +88,7 @@ class LLMSQLGeneratorService:
                 retry_feedback = result.explanation or "não foi devolvida nenhuma query."
                 continue
             try:
-                self._validate_citations(result, evidence)
+                result = self._validate_citations(result, evidence)
                 parameters = {parameter.name: parameter.value for parameter in result.parameters}
                 self.sqlite_service.validate_select(result.sql, parameters)
             except (LLMError, SQLiteDatabaseError) as error:
@@ -122,7 +122,7 @@ class LLMSQLGeneratorService:
         self,
         result: SQLGenerationResult,
         evidence: Sequence[RetrievedChunk],
-    ) -> None:
+    ) -> SQLGenerationResult:
         available = {
             (
                 str(item.chunk.metadata.get("source", "unknown")),
@@ -130,18 +130,32 @@ class LLMSQLGeneratorService:
             ): item.chunk.content
             for item in evidence
         }
+        valid_citations = []
+        invalid_reasons = []
         for citation in result.citations:
             content = available.get((citation.source, citation.chunk_id))
             if content is None:
-                raise LLMError(
+                invalid_reasons.append(
                     f"OpenAI cited unknown evidence: {citation.source} / {citation.chunk_id}."
                 )
+                continue
             quote = self._normalize_quote(citation.quote)
             if not quote or quote not in self._normalize_quote(content):
-                raise LLMError(
+                invalid_reasons.append(
                     f"OpenAI returned a quote that is not present in "
                     f"{citation.source} / {citation.chunk_id}."
                 )
+                continue
+            valid_citations.append(citation)
+
+        if not valid_citations:
+            valid_ids = "; ".join(f"{source} / {chunk_id}" for source, chunk_id in available)
+            raise LLMError(
+                f"{invalid_reasons[0] if invalid_reasons else 'No citations returned.'} "
+                f"Usa apenas source / chunk_id destes: {valid_ids}."
+            )
+        # Citações inválidas são descartadas desde que reste pelo menos uma válida.
+        return result.model_copy(update={"citations": valid_citations})
 
     def _normalize_quote(self, text: str) -> str:
         return re.sub(r"\s+", " ", text).strip().casefold()

@@ -8,7 +8,9 @@ a linha correspondente; se pedir apenas o valor, use a agregação `MAX` ou
 `MIN`. Não confunda o maior valor individual com a entidade que tem a maior
 média, soma ou mediana.
 
-Maior atraso individual:
+## Maior atraso individual de chegada (valor máximo)
+
+Perguntas típicas: «qual o maior atraso?», «atraso máximo registado».
 
 ```sql
 SELECT MAX(ra.atraso_minutos) AS maior_atraso_minutos
@@ -18,7 +20,9 @@ WHERE v.estado = 'Realizada'
   AND ra.tipo_registo = 'Chegada';
 ```
 
-Menor atraso individual:
+## Menor atraso individual de chegada (valor mínimo)
+
+Perguntas típicas: «qual o menor atraso?», «atraso mínimo registado».
 
 ```sql
 SELECT MIN(ra.atraso_minutos) AS menor_atraso_minutos
@@ -28,8 +32,12 @@ WHERE v.estado = 'Realizada'
   AND ra.tipo_registo = 'Chegada';
 ```
 
-Atraso médio de chegada por tipo de comboio. Registos pontuais contam como
-zero minutos.
+## Atraso médio de chegada por tipo de comboio num período
+
+Perguntas típicas: «atraso médio por tipo de comboio entre duas datas»,
+«média de atraso por tipo». Usa `AVG` com `GROUP BY c.tipo` e o intervalo
+`data_viagem >= :data_inicio AND data_viagem < :data_fim`. Registos pontuais
+contam como zero minutos.
 
 ```sql
 SELECT

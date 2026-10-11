@@ -1,6 +1,9 @@
 # Agregações
 
-Contar viagens suprimidas por dia. Só aparecem dias com pelo menos uma
+## Viagens suprimidas por dia num período
+
+Perguntas típicas: «quantas viagens foram suprimidas por dia?», «supressões
+diárias». Contar viagens suprimidas por dia. Só aparecem dias com pelo menos uma
 supressão.
 
 ```sql
@@ -13,9 +16,10 @@ GROUP BY data_viagem
 ORDER BY data_viagem;
 ```
 
-## Taxas por grupo e filtros de agregados
+## Taxa de supressão por rota (origem e destino)
 
-Para comparar taxas entre rotas, o numerador e o denominador têm de usar o
+Perguntas típicas: «rotas com maior percentagem de supressões», «taxa de
+viagens suprimidas por rota». Para comparar taxas entre rotas, o numerador e o denominador têm de usar o
 mesmo grupo: aqui, o número de viagens suprimidas dividido pelo total de
 viagens de cada rota. `HAVING` filtra grupos depois da agregação; `WHERE`
 filtraria linhas antes de calcular a taxa.
@@ -39,8 +43,11 @@ ORDER BY percentagem_suprimida DESC, origem.nome, destino.nome
 LIMIT :limite;
 ```
 
-Para filtrar tipos de comboio pelo atraso médio, aplica `HAVING` à expressão
-agregada; não coloques `AVG(...)` em `WHERE`.
+## Tipos de comboio com atraso médio acima de um limite (HAVING)
+
+Perguntas típicas: «que tipos de comboio têm atraso médio superior a X
+minutos?». Para filtrar tipos de comboio pelo atraso médio, aplica `HAVING` à
+expressão agregada; não coloques `AVG(...)` em `WHERE`.
 
 ```sql
 SELECT
@@ -57,9 +64,10 @@ HAVING AVG(ra.atraso_minutos) > :atraso_medio_minimo
 ORDER BY atraso_medio_minutos DESC, c.tipo;
 ```
 
-## Comparar medidas da mesma viagem
+## Variação do atraso entre partida e chegada por comboio
 
-Quando uma pergunta compara partida e chegada da mesma viagem, relaciona os
+Perguntas típicas: «em que comboios o atraso aumentou mais entre a partida e
+a chegada?». Quando uma pergunta compara partida e chegada da mesma viagem, relaciona os
 dois registos pelo `id_viagem` e pelo `tipo_registo`. A diferença abaixo é
 positiva quando o atraso aumentou até à chegada e negativa quando diminuiu.
 
@@ -82,9 +90,10 @@ ORDER BY variacao_media_atraso_minutos DESC, v.id_comboio
 LIMIT :limite;
 ```
 
-## Contagens distintas e percentagens
+## Contagem de comboios distintos com viagens realizadas
 
-Para contar entidades diferentes, usa `COUNT(DISTINCT coluna)` e filtra o
+Perguntas típicas: «quantos comboios diferentes circularam no período?». Para
+contar entidades diferentes, usa `COUNT(DISTINCT coluna)` e filtra o
 conjunto antes da contagem. Este exemplo conta os comboios que realizaram
 viagens no período, não o número de viagens.
 
@@ -96,7 +105,10 @@ WHERE estado = 'Realizada'
   AND data_viagem < :data_fim;
 ```
 
-Para calcular uma percentagem, define explicitamente o denominador. Aqui, a
+## Percentagem de viagens suprimidas num período
+
+Perguntas típicas: «que percentagem das viagens foi suprimida?». Para calcular
+uma percentagem, define explicitamente o denominador. Aqui, a
 percentagem de supressões é calculada sobre todas as viagens do período, não
 apenas sobre as realizadas. `NULLIF` evita divisão por zero se o período não
 tiver viagens.
@@ -113,9 +125,10 @@ WHERE data_viagem >= :data_inicio
   AND data_viagem < :data_fim;
 ```
 
-## Agregação condicional
+## Viagens realizadas, planeadas e suprimidas por dia (agregação condicional)
 
-Quando a pergunta pede várias categorias lado a lado, usa `SUM(CASE WHEN ...)`
+Perguntas típicas: «quantas viagens realizadas, planeadas e suprimidas por
+dia?». Quando a pergunta pede várias categorias lado a lado, usa `SUM(CASE WHEN ...)`
 para contar cada categoria e agrupa pela dimensão pedida. Ao contrário de
 filtrar por um único estado em `WHERE`, esta forma mantém as viagens dos três
 estados no mesmo resultado.
