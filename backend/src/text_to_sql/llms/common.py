@@ -5,7 +5,12 @@ from openai import OpenAI, OpenAIError
 from openai.types.responses import ResponseInputItemParam
 from pydantic import BaseModel, ValidationError
 
-from text_to_sql.constants import COMPONENT_LLM
+from text_to_sql.constants import (
+    COMPONENT_LLM,
+    LLM_MAX_OUTPUT_TOKENS,
+    OPENAI_MAX_RETRIES,
+    OPENAI_TIMEOUT_SECONDS,
+)
 from text_to_sql.errors import LLMError
 from text_to_sql.usage_metrics import UsageMetricsService
 
@@ -16,7 +21,11 @@ class OpenAIRequestError(LLMError):
 
 def create_openai_client(api_key: str) -> OpenAI:
     try:
-        return OpenAI(api_key=api_key)
+        return OpenAI(
+            api_key=api_key,
+            timeout=OPENAI_TIMEOUT_SECONDS,
+            max_retries=OPENAI_MAX_RETRIES,
+        )
     except OpenAIError as error:
         raise LLMError(f"Could not initialize the OpenAI client: {error}") from error
 
@@ -40,6 +49,7 @@ def parse_structured_response[StructuredResult: BaseModel](
             instructions=instructions,
             input=messages,
             text_format=response_model,
+            max_output_tokens=LLM_MAX_OUTPUT_TOKENS,
         )
     except OpenAIError as error:
         if usage_metrics is not None:

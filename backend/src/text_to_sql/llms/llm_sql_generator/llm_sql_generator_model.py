@@ -55,5 +55,9 @@ class SQLGenerationResult(BaseModel):
                 )
             object.__setattr__(self, "sql", normalized_sql)
         elif self.sql is not None or self.parameters or self.citations:
-            raise ValueError("An unanswerable result cannot include SQL, parameters, or citations.")
+            # O modelo por vezes preenche SQL ao declarar a pergunta não respondível;
+            # descarta-se para que o ciclo de retries use a explicação.
+            object.__setattr__(self, "sql", None)
+            object.__setattr__(self, "parameters", [])
+            object.__setattr__(self, "citations", [])
         return self

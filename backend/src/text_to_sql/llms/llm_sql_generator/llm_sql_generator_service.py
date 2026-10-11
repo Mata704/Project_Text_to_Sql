@@ -16,6 +16,7 @@ from text_to_sql.llms.llm_sql_generator.constants import (
     SQL_GENERATION_INSTRUCTIONS,
 )
 from text_to_sql.llms.llm_sql_generator.llm_sql_generator_model import (
+    SQLCitation,
     SQLGenerationResult,
 )
 from text_to_sql.retrieval.retrieval_model import RetrievedChunk
@@ -131,9 +132,11 @@ class LLMSQLGeneratorService:
             ): item.chunk.content
             for item in evidence
         }
+        source_by_chunk_id = {chunk_id: source for source, chunk_id in available}
         valid_citations = []
         invalid_reasons = []
         for citation in result.citations:
+            citation = self._repair_citation(citation, available, source_by_chunk_id)
             content = available.get((citation.source, citation.chunk_id))
             if content is None:
                 invalid_reasons.append(
@@ -157,6 +160,22 @@ class LLMSQLGeneratorService:
             )
         # Citações inválidas são descartadas desde que reste pelo menos uma válida.
         return result.model_copy(update={"citations": valid_citations})
+
+    def _repair_citation(
+        self,
+        citation: SQLCitation,
+        available: dict[tuple[str, str], str],
+        source_by_chunk_id: dict[str, str],
+    ) -> SQLCitation:
+        """Fixes source/chunk_id mix-ups when the chunk_id identifies the evidence."""
+        if (citation.source, citation.chunk_id) in available:
+            return citation
+        for chunk_id in (citation.chunk_id, citation.source):
+            if chunk_id in source_by_chunk_id:
+                return citation.model_copy(
+                    update={"source": source_by_chunk_id[chunk_id], "chunk_id": chunk_id}
+                )
+        return citation
 
     def _normalize_quote(self, text: str) -> str:
         return re.sub(r"\s+", " ", text).strip().casefold()

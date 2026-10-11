@@ -4,7 +4,11 @@ from time import perf_counter
 from openai import OpenAI, OpenAIError
 from pydantic import ValidationError
 
-from text_to_sql.constants import COMPONENT_EMBEDDINGS
+from text_to_sql.constants import (
+    COMPONENT_EMBEDDINGS,
+    OPENAI_MAX_RETRIES,
+    OPENAI_TIMEOUT_SECONDS,
+)
 from text_to_sql.embeddings.embedding_model import EmbeddingConfig, TextEmbedding
 from text_to_sql.errors import EmbeddingError
 from text_to_sql.usage_metrics import UsageMetricsService
@@ -26,7 +30,11 @@ class EmbeddingService:
         self.usage_metrics = usage_metrics
         self.usage_component = usage_component
         try:
-            self.client = OpenAI(api_key=api_key)
+            self.client = OpenAI(
+                api_key=api_key,
+                timeout=OPENAI_TIMEOUT_SECONDS,
+                max_retries=OPENAI_MAX_RETRIES,
+            )
         except OpenAIError as error:
             raise EmbeddingError(f"Could not initialize the OpenAI client: {error}") from error
 
