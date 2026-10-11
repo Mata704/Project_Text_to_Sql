@@ -29,6 +29,39 @@ def test_chat_rejects_empty_question(monkeypatch) -> None:
         assert client.post("/chat", json={}).status_code == 422
 
 
+@pytest.mark.parametrize("count", [0, 15])
+def test_chat_passes_only_last_ten_history_messages(monkeypatch, count: int) -> None:
+    received: list = []
+
+    class FakeSelector:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def run(self, _question: str, history=()):
+            received.extend(history)
+            return SimpleNamespace(
+                status="irrelevant", normalized_query="fora", clarification_question=None
+            )
+
+    monkeypatch.setattr("text_to_sql.api.server.prepare_runtime", lambda: _fake_runtime())
+    monkeypatch.setattr("text_to_sql.api.chat.LLMSelectorService", FakeSelector)
+    history = [
+        {"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"} for i in range(count)
+    ]
+    with TestClient(create_app()) as client:
+        reply = client.post("/chat", json={"question": "olá", "history": history})
+    assert reply.status_code == 200
+    assert [m.content for m in received] == [f"m{i}" for i in range(count)][-10:]
+
+
+def _fake_runtime():
+    return SimpleNamespace(
+        settings=SimpleNamespace(openai_model="m"),
+        api_key="k",
+        ingestion_config=None,
+    )
+
+
 @pytest.mark.parametrize(
     ("status", "should_retrieve"),
     [
@@ -91,7 +124,7 @@ def test_cli_retrieves_only_relevant_questions(
             self.usage_metrics = usage_metrics
             self.interaction_logs = interaction_logs
 
-        def run(self, question: str) -> None:
+        def run(self, question: str, history=()) -> None:
             calls.append((self.kwargs, question))
             self.usage_metrics.record_call(
                 component="question_classifier",
@@ -302,7 +335,7 @@ def test_chat_includes_sqlite_failure_reason_in_response_and_logs(monkeypatch) -
         def __init__(self, **_kwargs) -> None:
             pass
 
-        def run(self, _question: str):
+        def run(self, _question: str, _history=()):
             return SimpleNamespace(status="relevant", normalized_query=question)
 
     class FakeRetrievalService:

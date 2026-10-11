@@ -1,0 +1,9 @@
+[project]
+name = "text-to-sql-frontend"
+version = "0.1.0"
+description = "Streamlit frontend for the Text-to-SQL train assistant."
+requires-python = ">=3.12"
+dependencies = [
+    "streamlit>=1.40.0",
+    "requests>=2.32.0",
+]

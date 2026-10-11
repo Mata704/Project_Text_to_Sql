@@ -32,12 +32,16 @@ class LLMSelectorService:
         self.usage_metrics = usage_metrics
         self.interaction_logs = interaction_logs
 
-    def run(self, question: str) -> QuestionClassificationResult:
+    def run(
+        self,
+        question: str,
+        history: Sequence[ConversationMessage] = (),
+    ) -> QuestionClassificationResult:
         question = question.strip()
         if not question:
             raise ValueError("The question cannot be empty.")
 
-        classification = self.classify_question(question)
+        classification = self.classify_question(question, history)
         if self.interaction_logs is not None:
             self.interaction_logs.record(
                 level="info",
@@ -69,6 +73,7 @@ class LLMSelectorService:
                 )
             )
             for message in history
+            if PROMPT_INJECTION_TERMS_PATTERN.sub("", message.content).strip()
         ]
         messages.append(
             _response_input_message(ConversationMessage(role="user", content=sanitized_question))

@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from text_to_sql.chat_pipeline import answer_relevant_question
@@ -11,9 +12,12 @@ from text_to_sql.interaction_logs import (
     InteractionResponse,
 )
 from text_to_sql.llms import LLMSelectorService
+from text_to_sql.llms.llm_selector import ConversationMessage
 from text_to_sql.retrieval import RetrievalConfig
 from text_to_sql.sample_database import SampleDatabaseService
 from text_to_sql.usage_metrics import UsageMetricsService
+
+HISTORY_MESSAGES_LIMIT = 10
 
 
 @dataclass(frozen=True)
@@ -39,7 +43,11 @@ def prepare_runtime() -> ChatRuntime:
     return ChatRuntime(settings=settings, api_key=api_key, ingestion_config=ingestion_config)
 
 
-def answer_chat(question: str, runtime: ChatRuntime) -> InteractionResponse:
+def answer_chat(
+    question: str,
+    runtime: ChatRuntime,
+    history: Sequence[ConversationMessage] = (),
+) -> InteractionResponse:
     interaction_logs = InteractionLogService()
     usage_metrics = UsageMetricsService(session_id=interaction_logs.session_id)
     answer: str | None = None
@@ -52,7 +60,7 @@ def answer_chat(question: str, runtime: ChatRuntime) -> InteractionResponse:
             model=runtime.settings.openai_model,
             usage_metrics=usage_metrics,
             interaction_logs=interaction_logs,
-        ).run(question)
+        ).run(question, history[-HISTORY_MESSAGES_LIMIT:])
 
         if classification.status == "irrelevant":
             answer = classification.normalized_query

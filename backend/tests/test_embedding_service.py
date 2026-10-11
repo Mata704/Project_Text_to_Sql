@@ -105,7 +105,8 @@ def test_embedding_service_records_usage_for_each_batch() -> None:
     assert component_metrics["input_tokens"] == 12
     assert component_metrics["output_tokens"] == 0
     assert component_metrics["total_tokens"] == 12
-    assert component_metrics["unpriced_calls"] == 1
+    assert component_metrics["unpriced_calls"] == 0
+    assert component_metrics["estimated_cost_usd"] == pytest.approx(12 * 0.02 / 1_000_000)
 
 
 def test_embedding_service_returns_empty_list_without_api_call() -> None:
