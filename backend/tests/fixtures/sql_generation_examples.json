@@ -1,0 +1,63 @@
+[
+  {
+    "question": "Que viagens estão previstas de Lisboa - Oriente para Porto - Campanhã no dia 5 de outubro de 2026?",
+    "sql": "SELECT v.data_viagem, c.codigo, origem.nome AS origem, destino.nome AS destino, v.hora_partida_prevista, v.hora_chegada_prevista, v.estado FROM viagens AS v JOIN comboios AS c ON c.id_comboio = v.id_comboio JOIN estacoes AS origem ON origem.id_estacao = v.estacao_origem_id JOIN estacoes AS destino ON destino.id_estacao = v.estacao_destino_id WHERE v.data_viagem = :data AND origem.nome = :origem AND destino.nome = :destino ORDER BY v.hora_partida_prevista;",
+    "parameters": {
+      "data": "2026-10-05",
+      "origem": "Lisboa - Oriente",
+      "destino": "Porto - Campanhã"
+    }
+  },
+  {
+    "question": "Quantas viagens foram suprimidas entre 1 e 7 de outubro de 2026, incluindo o dia 1 e excluindo o dia 7?",
+    "sql": "SELECT COUNT(*) AS viagens_suprimidas FROM viagens WHERE estado = 'Suprimida' AND data_viagem >= :data_inicio AND data_viagem < :data_fim;",
+    "parameters": {
+      "data_inicio": "2026-10-01",
+      "data_fim": "2026-10-07"
+    }
+  },
+  {
+    "question": "Qual foi o atraso de chegada do comboio IC523 em Porto - Campanhã no dia 5 de outubro de 2026?",
+    "sql": "SELECT v.data_viagem, c.codigo, e.nome AS estacao, ra.hora_real, ra.atraso_minutos, ra.motivo FROM registos_atraso AS ra JOIN viagens AS v ON v.id_viagem = ra.id_viagem JOIN comboios AS c ON c.id_comboio = v.id_comboio JOIN estacoes AS e ON e.id_estacao = ra.estacao_id WHERE c.codigo = :codigo AND e.nome = :estacao AND v.data_viagem = :data AND ra.tipo_registo = 'Chegada' AND v.estado = 'Realizada';",
+    "parameters": {
+      "codigo": "IC523",
+      "estacao": "Porto - Campanhã",
+      "data": "2026-10-05"
+    }
+  },
+  {
+    "question": "Qual foi o atraso médio de chegada, por tipo de comboio, entre 1 e 8 de outubro de 2026?",
+    "sql": "SELECT c.tipo, ROUND(AVG(ra.atraso_minutos), 2) AS atraso_medio_minutos, COUNT(*) AS registos FROM registos_atraso AS ra JOIN viagens AS v ON v.id_viagem = ra.id_viagem JOIN comboios AS c ON c.id_comboio = v.id_comboio WHERE v.estado = 'Realizada' AND ra.tipo_registo = 'Chegada' AND v.data_viagem >= :data_inicio AND v.data_viagem < :data_fim GROUP BY c.tipo ORDER BY atraso_medio_minutos DESC;",
+    "parameters": {
+      "data_inicio": "2026-10-01",
+      "data_fim": "2026-10-08"
+    }
+  },
+  {
+    "question": "Quais foram as cinco estações com maior atraso total de chegada entre 1 e 8 de outubro de 2026?",
+    "sql": "SELECT e.nome AS estacao, SUM(ra.atraso_minutos) AS atraso_total_minutos, COUNT(*) AS numero_chegadas FROM registos_atraso AS ra JOIN viagens AS v ON v.id_viagem = ra.id_viagem JOIN estacoes AS e ON e.id_estacao = ra.estacao_id WHERE v.estado = 'Realizada' AND ra.tipo_registo = 'Chegada' AND v.data_viagem >= :data_inicio AND v.data_viagem < :data_fim GROUP BY e.id_estacao, e.nome ORDER BY atraso_total_minutos DESC LIMIT :limite;",
+    "parameters": {
+      "data_inicio": "2026-10-01",
+      "data_fim": "2026-10-08",
+      "limite": 5
+    }
+  },
+  {
+    "question": "Quantas viagens realizadas, planeadas e suprimidas existem por dia entre 9 e 12 de outubro de 2026?",
+    "sql": "SELECT data_viagem, estado, COUNT(*) AS numero_viagens FROM viagens WHERE data_viagem >= :data_inicio AND data_viagem < :data_fim GROUP BY data_viagem, estado ORDER BY data_viagem, estado;",
+    "parameters": {
+      "data_inicio": "2026-10-09",
+      "data_fim": "2026-10-13"
+    }
+  },
+  {
+    "question": "Qual a viagem com maior atraso?",
+    "sql": "SELECT v.id_viagem, v.data_viagem, c.codigo, origem.nome AS origem, destino.nome AS destino, ra.atraso_minutos AS atraso_chegada_minutos, ra.hora_real AS hora_chegada_real, ra.motivo FROM registos_atraso AS ra JOIN viagens AS v ON v.id_viagem = ra.id_viagem JOIN comboios AS c ON c.id_comboio = v.id_comboio JOIN estacoes AS origem ON origem.id_estacao = v.estacao_origem_id JOIN estacoes AS destino ON destino.id_estacao = v.estacao_destino_id WHERE v.estado = 'Realizada' AND ra.tipo_registo = 'Chegada' ORDER BY ra.atraso_minutos DESC, v.data_viagem, v.id_viagem LIMIT 1;",
+    "parameters": {}
+  },
+  {
+    "question": "Qual o comboio com maior atraso médio? Quero o id do comboio.",
+    "sql": "SELECT v.id_comboio, ROUND(AVG(ra.atraso_minutos), 2) AS atraso_medio_chegada_minutos, COUNT(*) AS numero_chegadas FROM registos_atraso AS ra JOIN viagens AS v ON v.id_viagem = ra.id_viagem WHERE v.estado = 'Realizada' AND ra.tipo_registo = 'Chegada' GROUP BY v.id_comboio ORDER BY atraso_medio_chegada_minutos DESC, v.id_comboio LIMIT 1;",
+    "parameters": {}
+  }
+]

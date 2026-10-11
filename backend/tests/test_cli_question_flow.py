@@ -53,6 +53,25 @@ def test_cli_retrieves_only_relevant_questions(
             )
             return [SimpleNamespace(chunk=chunk, score=0.91)]
 
+    class FakeSQLGeneratorService:
+        def __init__(self, api_key: str, model: str) -> None:
+            calls.append(({"api_key": api_key, "model": model}, "sql-generator-init"))
+
+        def generate(self, question: str, evidence):
+            calls.append(({"evidence": evidence}, question))
+            return SimpleNamespace(
+                explanation="Contagem de viagens.",
+                sql="SELECT COUNT(*) FROM viagens;",
+                parameters=[],
+                citations=[
+                    SimpleNamespace(
+                        source="tables/viagens.md",
+                        chunk_id="viagens-001",
+                        quote="Descrição das viagens.",
+                    )
+                ],
+            )
+
     monkeypatch.setattr(
         "text_to_sql.cli.DocumentIngestionService",
         FakeIngestionService,
@@ -77,6 +96,10 @@ def test_cli_retrieves_only_relevant_questions(
         "text_to_sql.cli.RetrievalService",
         FakeRetrievalService,
     )
+    monkeypatch.setattr(
+        "text_to_sql.cli.LLMSQLGeneratorService",
+        FakeSQLGeneratorService,
+    )
     monkeypatch.setattr("builtins.input", lambda _prompt: "Quantas viagens?")
 
     assert main() == 0
@@ -97,9 +120,16 @@ def test_cli_retrieves_only_relevant_questions(
         assert calls[4][0]["config"].embedding.model == "test-embedding-model"
         assert calls[4][1] == "retrieval-init"
         assert calls[5] == ({}, "Pergunta normalizada?")
+        assert calls[6] == (
+            {"api_key": "test-key", "model": "test-model"},
+            "sql-generator-init",
+        )
+        assert calls[7][1] == "Pergunta normalizada?"
         assert "Chunks recuperados:" in output
         assert "1. ID: viagens-001 | score: 0.910 | fonte: tables/viagens.md" in output
         assert "A documentação descreve as viagens." in output
+        assert "Query SQL gerada:" in output
+        assert "SELECT COUNT(*) FROM viagens;" in output
     else:
         assert len(calls) == 4
         assert "Chunks recuperados:" not in output

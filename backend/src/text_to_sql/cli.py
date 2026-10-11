@@ -1,10 +1,11 @@
+import json
 import sys
 
 from text_to_sql.config import Settings
 from text_to_sql.document_ingestion import DocumentIngestionConfig, DocumentIngestionService
 from text_to_sql.embeddings import EmbeddingConfig
 from text_to_sql.errors import ConfigurationError, TextToSQLError
-from text_to_sql.llms import LLMSelectorService
+from text_to_sql.llms import LLMSelectorService, LLMSQLGeneratorService
 from text_to_sql.retrieval import RetrievalConfig, RetrievalService
 from text_to_sql.sample_database import SampleDatabaseService
 
@@ -71,6 +72,21 @@ def main() -> int:
                     print(result.chunk.content)
             else:
                 print("Não foram encontradas evidências relevantes na documentação.")
+
+            generation = LLMSQLGeneratorService(
+                api_key=api_key,
+                model=settings.openai_model,
+            ).generate(classification.normalized_query, retrieved_chunks)
+            print("\nQuery SQL gerada:")
+            print(generation.explanation)
+            if generation.sql is not None:
+                print(generation.sql)
+                print(
+                    "Parâmetros: "
+                    + json.dumps(generation.parameters, ensure_ascii=False, sort_keys=True)
+                )
+            for citation in generation.citations:
+                print(f"- {citation.source} / {citation.chunk_id}: {citation.quote}")
     except ValueError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1

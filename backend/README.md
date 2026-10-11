@@ -199,7 +199,25 @@ for result in results:
 ```
 
 O serviço apenas recupera evidências; geração de resposta fundamentada nessas
-evidências será integrada numa etapa posterior.
+evidências é feita por `LLMSQLGeneratorService`, em `llms/llm_sql_generator/`.
+O gerador recebe a pergunta normalizada e os chunks recuperados, produz uma
+resposta estruturada com uma query SQLite `SELECT`, parâmetros nomeados como
+uma lista de objetos `{name, value}` e citações, ou abstém-se quando as
+evidências não chegam. Valida que os placeholders correspondem exatamente aos
+parâmetros e que as citações apontam para chunks recebidos e excertos do
+conteúdo original. O SQL e os parâmetros são apresentados no CLI, mas a query
+ainda não é executada.
+
+```python
+from text_to_sql.llms import LLMSQLGeneratorService
+
+generation = LLMSQLGeneratorService(
+    api_key=settings.openai_api_key.get_secret_value(),
+    model=settings.openai_model,
+).generate("Quantas viagens existem?", results)
+if generation.sql is not None:
+    print(generation.sql)
+```
 
 ## Ingestão automática da documentação
 
@@ -338,15 +356,21 @@ src/text_to_sql/
 │   ├── document_ingestion_model.py   # Configuração e resultado da ingestão
 │   └── document_ingestion_service.py # Pipeline documentação → ChromaDB
 └── llms/
-    └── llm_selector/
-        ├── constants.py             # Modelo, instruções e limite de clarificação
-        ├── llm_selector_service.py # Prompt, chamada OpenAI e fluxo de clarificações
-        └── llm_selector_model.py   # Modelos Pydantic usados pelo selector
+    ├── llm_selector/
+    │   ├── constants.py             # Modelo, instruções e limite de clarificação
+    │   ├── llm_selector_service.py # Prompt, chamada OpenAI e fluxo de clarificações
+    │   └── llm_selector_model.py   # Modelos Pydantic usados pelo selector
+    └── llm_sql_generator/
+        ├── constants.py                   # Instruções e modelo predefinido
+        ├── llm_sql_generator_model.py     # Resultado SQL estruturado e citações
+        └── llm_sql_generator_service.py   # Geração SQL fundamentada no retrieval
 ```
 
 A base SQLite de exemplo fica em `data/` e é sincronizada no arranque da CLI.
-A recuperação RAG, geração SQL, consulta SQLite, FastAPI e frontend serão
-adicionados nas fases seguintes.
+A recuperação RAG e a geração SQL já estão ligadas ao percurso do CLI. A
+execução do SQL na base SQLite, FastAPI e frontend serão adicionados nas fases
+seguintes.
 
-O percurso da CLI sincroniza a documentação com a vector store e depois faz a
-classificação com a OpenAI, mantendo o histórico de clarificação em memória.
+O percurso da CLI sincroniza a documentação com a vector store, classifica e
+clarifica a pergunta com a OpenAI e, apenas para perguntas relevantes, recupera
+evidências e gera SQL fundamentado sem o executar.
