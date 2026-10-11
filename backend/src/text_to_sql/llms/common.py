@@ -5,6 +5,7 @@ from openai import OpenAI, OpenAIError
 from openai.types.responses import ResponseInputItemParam
 from pydantic import BaseModel, ValidationError
 
+from text_to_sql.constants import COMPONENT_LLM
 from text_to_sql.errors import LLMError
 from text_to_sql.usage_metrics import UsageMetricsService
 
@@ -30,7 +31,7 @@ def parse_structured_response[StructuredResult: BaseModel](
     action: str,
     result_name: str,
     usage_metrics: UsageMetricsService | None = None,
-    usage_component: str = "llm",
+    usage_component: str = COMPONENT_LLM,
 ) -> StructuredResult:
     started_at = perf_counter()
     try:

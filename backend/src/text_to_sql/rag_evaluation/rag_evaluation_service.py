@@ -6,6 +6,7 @@ import tiktoken
 from pydantic import BaseModel, ConfigDict, Field
 
 from text_to_sql.chunking.constants import TOKENIZER_ENCODING
+from text_to_sql.constants import UNKNOWN_SOURCE
 from text_to_sql.retrieval.retrieval_model import RetrievedChunk
 
 
@@ -57,7 +58,7 @@ class RAGEvaluationService:
             raise ValueError("Evaluation latency must be finite and non-negative.")
 
         retrieved_sources = {
-            str(item.chunk.metadata.get("source", "unknown")) for item in retrieved_chunks
+            str(item.chunk.metadata.get("source", UNKNOWN_SOURCE)) for item in retrieved_chunks
         }
         return RAGEvaluationResult(
             case_id=case.case_id,
@@ -122,7 +123,7 @@ class RAGEvaluationService:
 
     def _context_token_count(self, retrieved_chunks: Sequence[RetrievedChunk]) -> int:
         context = "\n\n".join(
-            f"[source={item.chunk.metadata.get('source', 'unknown')}; "
+            f"[source={item.chunk.metadata.get('source', UNKNOWN_SOURCE)}; "
             f"chunk_id={item.chunk.chunk_id}; score={item.score:.3f}]\n"
             f"{item.chunk.content}"
             for item in retrieved_chunks

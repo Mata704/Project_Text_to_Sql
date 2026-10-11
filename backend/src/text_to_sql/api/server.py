@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from text_to_sql.api.chat import ChatRuntime, answer_chat, prepare_runtime
+from text_to_sql.api.constants import APP_TITLE, HEALTH_STATUS_OK
 from text_to_sql.interaction_logs import InteractionResponse
 from text_to_sql.llms.llm_selector import ConversationMessage
 
@@ -25,7 +26,7 @@ class ChatRequest(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    status: str = "ok"
+    status: str = HEALTH_STATUS_OK
 
 
 @asynccontextmanager
@@ -35,7 +36,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Text-to-SQL Comboios", lifespan=lifespan)
+    app = FastAPI(title=APP_TITLE, lifespan=lifespan)
 
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:

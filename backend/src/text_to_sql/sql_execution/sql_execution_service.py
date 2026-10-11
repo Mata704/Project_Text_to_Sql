@@ -3,14 +3,13 @@ from collections.abc import Sequence
 from text_to_sql.errors import SQLiteDatabaseError
 from text_to_sql.llms import LLMSQLRepairService
 from text_to_sql.retrieval import RetrievedChunk
+from text_to_sql.sql_execution.constants import MAX_SQL_EXECUTIONS
 from text_to_sql.sql_execution.sql_execution_model import (
     SQLExecutionResult,
     SQLiteValue,
 )
 from text_to_sql.sqlite_db import SQLiteService
 from text_to_sql.usage_metrics import UsageMetricsService
-
-MAX_SQL_EXECUTIONS = 3
 
 
 class SQLExecutionWithRetriesService:

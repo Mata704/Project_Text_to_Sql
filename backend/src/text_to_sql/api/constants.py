@@ -1,0 +1,3 @@
+APP_TITLE = "Text-to-SQL Comboios"
+HEALTH_STATUS_OK = "ok"
+HISTORY_MESSAGES_LIMIT = 10

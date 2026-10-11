@@ -1,0 +1,13 @@
+DETAIL_LOGS = "Logs"
+DETAIL_COSTS = "Custos"
+DETAIL_EVIDENCE = "Evidências"
+DETAIL_OPTIONS = [DETAIL_LOGS, DETAIL_COSTS, DETAIL_EVIDENCE]
+
+DIALOG_WIDTH = "large"
+DETAILS_PILLS_LABEL = "Detalhes"
+PILLS_KEY_PREFIX = "pills-"
+
+NO_LOGS_TEXT = "Sem logs."
+NO_METRICS_TEXT = "Sem métricas de utilização."
+NO_EVIDENCE_TEXT = "Sem evidências."
+UNAVAILABLE_COST_TEXT = "n/d"

@@ -1,3 +1,4 @@
+from text_to_sql.constants import COMPONENT_QUERY_EMBEDDINGS
 from text_to_sql.embeddings import EmbeddingService
 from text_to_sql.retrieval.retrieval_model import (
     RetrievalConfig,
@@ -25,7 +26,7 @@ class RetrievalService:
                 api_key=api_key,
                 config=self.config.embedding,
                 usage_metrics=usage_metrics,
-                usage_component="query_embeddings",
+                usage_component=COMPONENT_QUERY_EMBEDDINGS,
             )
         )
         self.vector_store_service = (

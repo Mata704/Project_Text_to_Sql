@@ -1,6 +1,5 @@
 import math
 from collections.abc import Sequence
-from pathlib import Path
 
 import chromadb
 from chromadb.errors import ChromaError
@@ -9,15 +8,14 @@ from text_to_sql.chunking.chunking_model import DocumentChunk
 from text_to_sql.embeddings.embedding_model import TextEmbedding
 from text_to_sql.errors import VectorStoreError
 from text_to_sql.vector_store.chroma_db_model import ChromaDBConfig, StoredChunk
-
-_DEFAULT_PERSIST_DIRECTORY = Path(__file__).resolve().parents[3] / "data" / "chroma"
+from text_to_sql.vector_store.constants import DEFAULT_PERSIST_DIRECTORY
 
 
 class ChromaDBService:
     def __init__(self, config: ChromaDBConfig | None = None) -> None:
         self.config = config or ChromaDBConfig()
         self.persist_directory = (
-            (self.config.persist_directory or _DEFAULT_PERSIST_DIRECTORY).expanduser().resolve()
+            (self.config.persist_directory or DEFAULT_PERSIST_DIRECTORY).expanduser().resolve()
         )
         try:
             self.persist_directory.mkdir(parents=True, exist_ok=True)

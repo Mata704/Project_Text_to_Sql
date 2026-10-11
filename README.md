@@ -7,7 +7,7 @@ posteriormente e executadas separadamente.
 
 ```text
 backend/   Backend Python: primeira etapa LLM e testes
-frontend/  Aplicação Streamlit (a desenvolver numa fase posterior)
+frontend/  Aplicação Streamlit
 ```
 
 ## Backend
@@ -41,4 +41,4 @@ uv run ruff check .
 ```
 
 Consulte [backend/README.md](./backend/README.md) para os detalhes da primeira etapa.
-O setup futuro do frontend será independente, em [frontend/](./frontend/README.md).
+O frontend (Streamlit) é independente, em [frontend/](./frontend/README.md).

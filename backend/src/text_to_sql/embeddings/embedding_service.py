@@ -4,6 +4,7 @@ from time import perf_counter
 from openai import OpenAI, OpenAIError
 from pydantic import ValidationError
 
+from text_to_sql.constants import COMPONENT_EMBEDDINGS
 from text_to_sql.embeddings.embedding_model import EmbeddingConfig, TextEmbedding
 from text_to_sql.errors import EmbeddingError
 from text_to_sql.usage_metrics import UsageMetricsService
@@ -16,7 +17,7 @@ class EmbeddingService:
         config: EmbeddingConfig | None = None,
         *,
         usage_metrics: UsageMetricsService | None = None,
-        usage_component: str = "embeddings",
+        usage_component: str = COMPONENT_EMBEDDINGS,
     ) -> None:
         if not api_key.strip():
             raise ValueError("The OpenAI API key cannot be empty.")

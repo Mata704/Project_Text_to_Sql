@@ -1,6 +1,12 @@
 from dataclasses import dataclass, field
 
 from text_to_sql.config import Settings
+from text_to_sql.constants import (
+    COMPONENT_RETRIEVAL,
+    COMPONENT_SQL_EXECUTION,
+    COMPONENT_SQL_GENERATOR,
+    UNKNOWN_SOURCE,
+)
 from text_to_sql.errors import LLMError
 from text_to_sql.interaction_logs import InteractionEvidence, InteractionLogService
 from text_to_sql.llms import LLMResultInterpreterService, LLMSQLGeneratorService
@@ -32,7 +38,7 @@ def answer_relevant_question(
 ) -> PipelineOutcome:
     interaction_logs.record(
         level="info",
-        component="retrieval",
+        component=COMPONENT_RETRIEVAL,
         event="retrieval_started",
         message="A pesquisa de evidências começou.",
         details={"top_k": retrieval_config.top_k},
@@ -44,7 +50,7 @@ def answer_relevant_question(
     ).retrieve(classification.normalized_query)
     interaction_logs.record(
         level="info",
-        component="retrieval",
+        component=COMPONENT_RETRIEVAL,
         event="retrieval_completed",
         message="A pesquisa de evidências terminou.",
         details={"count": len(retrieved_chunks)},
@@ -64,7 +70,7 @@ def answer_relevant_question(
     except LLMError as error:
         interaction_logs.record(
             level="warning",
-            component="sql_generator",
+            component=COMPONENT_SQL_GENERATOR,
             event="generation_failed",
             message="A geração da query falhou após as tentativas permitidas.",
             details={"error": str(error)},
@@ -76,28 +82,24 @@ def answer_relevant_question(
         citations_by_chunk.setdefault((citation.source, citation.chunk_id), []).append(
             citation.quote
         )
-    evidences = [
-        InteractionEvidence(
-            rank=rank,
-            source=str(result.chunk.metadata.get("source", "unknown")),
-            chunk_id=result.chunk.chunk_id,
-            score=result.score,
-            content=result.chunk.content,
-            citations=citations_by_chunk.get(
-                (
-                    str(result.chunk.metadata.get("source", "unknown")),
-                    result.chunk.chunk_id,
-                ),
-                [],
-            ),
+    evidences = []
+    for rank, result in enumerate(retrieved_chunks, start=1):
+        source = str(result.chunk.metadata.get("source", UNKNOWN_SOURCE))
+        evidences.append(
+            InteractionEvidence(
+                rank=rank,
+                source=source,
+                chunk_id=result.chunk.chunk_id,
+                score=result.score,
+                content=result.chunk.content,
+                citations=citations_by_chunk.get((source, result.chunk.chunk_id), []),
+            )
         )
-        for rank, result in enumerate(retrieved_chunks, start=1)
-    ]
 
     if generation.sql is None:
         interaction_logs.record(
             level="warning",
-            component="sql_generator",
+            component=COMPONENT_SQL_GENERATOR,
             event="question_not_answerable",
             message="Não foi possível gerar uma query com as evidências disponíveis.",
         )
@@ -109,7 +111,7 @@ def answer_relevant_question(
     parameters = {parameter.name: parameter.value for parameter in generation.parameters}
     interaction_logs.record(
         level="info",
-        component="sql_execution",
+        component=COMPONENT_SQL_EXECUTION,
         event="execution_started",
         message="A execução da query SELECT começou.",
     )
@@ -126,7 +128,7 @@ def answer_relevant_question(
     )
     interaction_logs.record(
         level="info" if execution.succeeded else "error",
-        component="sql_execution",
+        component=COMPONENT_SQL_EXECUTION,
         event="execution_completed" if execution.succeeded else "execution_failed",
         message=(
             "A execução da query terminou."

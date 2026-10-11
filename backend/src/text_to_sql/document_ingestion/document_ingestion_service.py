@@ -3,6 +3,7 @@ import json
 from collections.abc import Sequence
 
 from text_to_sql.chunking import ChunkingService, DocumentChunk
+from text_to_sql.constants import COMPONENT_DOCUMENT_INGESTION_EMBEDDINGS
 from text_to_sql.document_ingestion.document_ingestion_model import (
     DocumentIngestionConfig,
     DocumentIngestionResult,
@@ -34,7 +35,7 @@ class DocumentIngestionService:
             api_key=api_key,
             config=self.config.embedding,
             usage_metrics=usage_metrics,
-            usage_component="document_ingestion_embeddings",
+            usage_component=COMPONENT_DOCUMENT_INGESTION_EMBEDDINGS,
         )
         self.vector_store_service = vector_store_service or ChromaDBService(
             config=self.config.vector_store,

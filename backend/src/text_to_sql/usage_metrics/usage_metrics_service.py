@@ -5,6 +5,8 @@ from math import isfinite
 from typing import TypedDict
 from uuid import uuid4
 
+from text_to_sql.usage_metrics.constants import PRICES_PER_MILLION_TOKENS
+
 
 class _AggregateReport(TypedDict):
     calls: int
@@ -29,19 +31,13 @@ class UsageMetricsReport(TypedDict):
     total: _AggregateReport
 
 
-_PRICES_PER_MILLION_TOKENS: dict[str, tuple[float, float]] = {
-    "gpt-4.1-mini": (0.40, 1.60),
-    "text-embedding-3-small": (0.02, 0.0),
-}
-
-
 def _prices_for(model: str) -> tuple[float, float] | None:
     """Resolves dated snapshots such as gpt-4.1-mini-2025-04-14 to their base model."""
-    if model in _PRICES_PER_MILLION_TOKENS:
-        return _PRICES_PER_MILLION_TOKENS[model]
-    for base in sorted(_PRICES_PER_MILLION_TOKENS, key=len, reverse=True):
+    if model in PRICES_PER_MILLION_TOKENS:
+        return PRICES_PER_MILLION_TOKENS[model]
+    for base in sorted(PRICES_PER_MILLION_TOKENS, key=len, reverse=True):
         if model.startswith(f"{base}-"):
-            return _PRICES_PER_MILLION_TOKENS[base]
+            return PRICES_PER_MILLION_TOKENS[base]
     return None
 
 

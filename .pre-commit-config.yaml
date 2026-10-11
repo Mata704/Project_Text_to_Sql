@@ -19,3 +19,21 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: frontend-pytest
+        name: frontend pytest
+        entry: uv run --directory frontend pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: frontend-ruff-check
+        name: frontend ruff check
+        entry: uv run --directory frontend ruff check .
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: frontend-ruff-format
+        name: frontend ruff format --check
+        entry: uv run --directory frontend ruff format --check .
+        language: system
+        pass_filenames: false
+        always_run: true

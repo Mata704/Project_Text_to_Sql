@@ -1,17 +1,12 @@
-from pathlib import Path
-
 import streamlit as st
 
-ASSETS = Path(__file__).parent / "assets"
+from constants import APP_TITLE, LOGO_SQUARE, PAGE_CHAT, PAGE_CHAT_URL_PATH, PAGE_HOME
+from views.constants import CHAT_TITLE, HOME_NAV_TITLE
 
-st.set_page_config(
-    page_title="Comboios Pedro Mata",
-    page_icon=str(ASSETS / "logo_square.png"),
-    layout="centered",
-)
+st.set_page_config(page_title=APP_TITLE, page_icon=LOGO_SQUARE, layout="centered")
 
 pages = [
-    st.Page("views/home.py", title="Início", default=True),
-    st.Page("views/chat.py", title="Conversa", url_path="chat"),
+    st.Page(PAGE_HOME, title=HOME_NAV_TITLE, default=True),
+    st.Page(PAGE_CHAT, title=CHAT_TITLE, url_path=PAGE_CHAT_URL_PATH),
 ]
 st.navigation(pages, position="hidden").run()

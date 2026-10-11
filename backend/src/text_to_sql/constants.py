@@ -1,0 +1,13 @@
+COMPONENT_INTERACTION = "interaction"
+COMPONENT_RETRIEVAL = "retrieval"
+COMPONENT_SQL_GENERATOR = "sql_generator"
+COMPONENT_SQL_EXECUTION = "sql_execution"
+COMPONENT_SQL_REPAIR = "sql_repair"
+COMPONENT_QUESTION_CLASSIFIER = "question_classifier"
+COMPONENT_RESULT_INTERPRETER = "result_interpreter"
+COMPONENT_EMBEDDINGS = "embeddings"
+COMPONENT_QUERY_EMBEDDINGS = "query_embeddings"
+COMPONENT_DOCUMENT_INGESTION_EMBEDDINGS = "document_ingestion_embeddings"
+COMPONENT_LLM = "llm"
+
+UNKNOWN_SOURCE = "unknown"

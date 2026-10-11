@@ -1,27 +1,24 @@
-from pathlib import Path
-
 import streamlit as st
 
 import sessions
-
-ASSETS = Path(__file__).parent.parent / "assets"
-
-st.markdown(
-    "<style>.block-container{padding-top:3rem;max-width:960px}"
-    "[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl'],"
-    "[data-testid='stLogo']{display:none}"
-    "[data-testid='stHeading'],[data-testid='stCaptionContainer']"
-    "{text-align:center;justify-content:center}</style>",
-    unsafe_allow_html=True,
+from constants import LOGO_WIDE, PAGE_CHAT, SESSION_STATE_KEY
+from views.constants import (
+    HOME_CAPTION,
+    HOME_HEADER,
+    HOME_LOGO_COLUMNS,
+    HOME_STYLE,
+    INPUT_PLACEHOLDER,
 )
 
-_, logo_col, _ = st.columns([1, 5, 1])
-logo_col.image(str(ASSETS / "logo_wide.png"), use_container_width=True)
+st.markdown(HOME_STYLE, unsafe_allow_html=True)
 
-st.header("Pergunte sobre comboios", anchor=False)
-st.caption("Escreva a sua pergunta para iniciar uma nova sessão.")
+_, logo_col, _ = st.columns(HOME_LOGO_COLUMNS)
+logo_col.image(LOGO_WIDE, width="stretch")
 
-question = st.chat_input("Escreva a sua pergunta...")
+st.header(HOME_HEADER, anchor=False)
+st.caption(HOME_CAPTION)
+
+question = st.chat_input(INPUT_PLACEHOLDER)
 if question and question.strip():
-    st.session_state["session_id"] = sessions.start_session(question.strip())
-    st.switch_page("views/chat.py")
+    st.session_state[SESSION_STATE_KEY] = sessions.start_session(question.strip())
+    st.switch_page(PAGE_CHAT)

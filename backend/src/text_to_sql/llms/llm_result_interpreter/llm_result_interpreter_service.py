@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 
+from text_to_sql.constants import COMPONENT_RESULT_INTERPRETER
 from text_to_sql.llms.common import create_openai_client, parse_structured_response
 from text_to_sql.llms.llm_result_interpreter.constants import (
     DEFAULT_RESULT_INTERPRETER_MODEL,
@@ -44,6 +45,6 @@ class LLMResultInterpreterService:
             action="interpret SQL results",
             result_name="result interpretation",
             usage_metrics=self.usage_metrics,
-            usage_component="result_interpreter",
+            usage_component=COMPONENT_RESULT_INTERPRETER,
         )
         return interpretation.answer

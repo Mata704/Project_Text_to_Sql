@@ -1,6 +1,7 @@
 import re
 from collections.abc import Sequence
 
+from text_to_sql.constants import COMPONENT_SQL_GENERATOR, UNKNOWN_SOURCE
 from text_to_sql.errors import LLMError, SQLiteDatabaseError
 from text_to_sql.interaction_logs import InteractionLogService
 from text_to_sql.llms.common import (
@@ -76,7 +77,7 @@ class LLMSQLGeneratorService:
                     action="generate SQL",
                     result_name="SQL generation result",
                     usage_metrics=self.usage_metrics,
-                    usage_component="sql_generator",
+                    usage_component=COMPONENT_SQL_GENERATOR,
                 )
             except OpenAIRequestError:
                 raise
@@ -98,7 +99,7 @@ class LLMSQLGeneratorService:
             if self.interaction_logs is not None:
                 self.interaction_logs.record(
                     level="info",
-                    component="sql_generator",
+                    component=COMPONENT_SQL_GENERATOR,
                     event="select_validated",
                     message="A query SELECT foi validada.",
                 )
@@ -112,7 +113,7 @@ class LLMSQLGeneratorService:
 
     def _format_evidence(self, evidence: Sequence[RetrievedChunk]) -> str:
         return "\n\n".join(
-            f"[source={item.chunk.metadata.get('source', 'unknown')}; "
+            f"[source={item.chunk.metadata.get('source', UNKNOWN_SOURCE)}; "
             f"chunk_id={item.chunk.chunk_id}; score={item.score:.3f}]\n"
             f"{item.chunk.content}"
             for item in evidence
@@ -125,7 +126,7 @@ class LLMSQLGeneratorService:
     ) -> SQLGenerationResult:
         available = {
             (
-                str(item.chunk.metadata.get("source", "unknown")),
+                str(item.chunk.metadata.get("source", UNKNOWN_SOURCE)),
                 item.chunk.chunk_id,
             ): item.chunk.content
             for item in evidence

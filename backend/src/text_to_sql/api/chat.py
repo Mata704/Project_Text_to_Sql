@@ -1,8 +1,10 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from text_to_sql.api.constants import HISTORY_MESSAGES_LIMIT
 from text_to_sql.chat_pipeline import answer_relevant_question
 from text_to_sql.config import Settings
+from text_to_sql.constants import COMPONENT_INTERACTION
 from text_to_sql.document_ingestion import DocumentIngestionConfig, DocumentIngestionService
 from text_to_sql.embeddings import EmbeddingConfig
 from text_to_sql.errors import ConfigurationError, TextToSQLError
@@ -16,8 +18,6 @@ from text_to_sql.llms.llm_selector import ConversationMessage
 from text_to_sql.retrieval import RetrievalConfig
 from text_to_sql.sample_database import SampleDatabaseService
 from text_to_sql.usage_metrics import UsageMetricsService
-
-HISTORY_MESSAGES_LIMIT = 10
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,7 @@ def answer_chat(
             answer = classification.normalized_query
             interaction_logs.record(
                 level="info",
-                component="interaction",
+                component=COMPONENT_INTERACTION,
                 event="out_of_scope_answer",
                 message="Foi devolvida a resposta para uma pergunta fora do âmbito.",
             )
@@ -75,7 +75,7 @@ def answer_chat(
             answer = classification.clarification_question
             interaction_logs.record(
                 level="info",
-                component="interaction",
+                component=COMPONENT_INTERACTION,
                 event="clarification_requested",
                 message="Foi pedida uma clarificação ao utilizador.",
             )
@@ -101,7 +101,7 @@ def answer_chat(
         error_message = str(error)
         interaction_logs.record(
             level="error",
-            component="interaction",
+            component=COMPONENT_INTERACTION,
             event="interaction_failed",
             message="A interação terminou com um erro.",
             details={"error": error_message},

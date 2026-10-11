@@ -2,6 +2,7 @@ from collections.abc import Sequence
 
 from openai.types.responses import EasyInputMessageParam, ResponseInputItemParam
 
+from text_to_sql.constants import COMPONENT_QUESTION_CLASSIFIER
 from text_to_sql.interaction_logs import InteractionLogService
 from text_to_sql.llms.common import create_openai_client, parse_structured_response
 from text_to_sql.llms.llm_selector.constants import (
@@ -45,7 +46,7 @@ class LLMSelectorService:
         if self.interaction_logs is not None:
             self.interaction_logs.record(
                 level="info",
-                component="question_classifier",
+                component=COMPONENT_QUESTION_CLASSIFIER,
                 event="question_classified",
                 message="A pergunta foi classificada.",
                 details={"status": classification.status},
@@ -53,7 +54,7 @@ class LLMSelectorService:
             if classification.status == "ambiguous":
                 self.interaction_logs.record(
                     level="warning",
-                    component="question_classifier",
+                    component=COMPONENT_QUESTION_CLASSIFIER,
                     event="clarification_unresolved",
                     message="A pergunta requer clarificação do utilizador.",
                 )
@@ -88,7 +89,7 @@ class LLMSelectorService:
             action="classify the question",
             result_name="question classification",
             usage_metrics=self.usage_metrics,
-            usage_component="question_classifier",
+            usage_component=COMPONENT_QUESTION_CLASSIFIER,
         )
 
     def _sanitize_user_content(self, content: str) -> str:

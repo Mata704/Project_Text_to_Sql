@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 
+from text_to_sql.constants import COMPONENT_SQL_REPAIR, UNKNOWN_SOURCE
 from text_to_sql.errors import LLMError, SQLiteDatabaseError
 from text_to_sql.llms.common import create_openai_client, parse_structured_response
 from text_to_sql.llms.llm_sql_repair.constants import (
@@ -49,7 +50,7 @@ class LLMSQLRepairService:
             action="repair SQL",
             result_name="SQL repair",
             usage_metrics=self.usage_metrics,
-            usage_component="sql_repair",
+            usage_component=COMPONENT_SQL_REPAIR,
         )
 
         values = {parameter.name: parameter.value for parameter in result.parameters}
@@ -61,7 +62,7 @@ class LLMSQLRepairService:
 
     def _format_evidence(self, evidence: Sequence[RetrievedChunk]) -> str:
         return "\n\n".join(
-            f"[source={item.chunk.metadata.get('source', 'unknown')}; "
+            f"[source={item.chunk.metadata.get('source', UNKNOWN_SOURCE)}; "
             f"chunk_id={item.chunk.chunk_id}]\n{item.chunk.content}"
             for item in evidence
         )

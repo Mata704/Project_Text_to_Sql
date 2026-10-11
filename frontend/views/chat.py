@@ -1,134 +1,68 @@
-from pathlib import Path
-
-import pandas as pd
 import streamlit as st
 
 import sessions
+from constants import (
+    LOGO_WIDE,
+    PAGE_HOME,
+    ROLE_USER,
+    SESSION_QUERY_PARAM,
+    SESSION_STATE_KEY,
+)
+from details import open_pending_dialog, render_detail_pills
+from views.constants import (
+    CHAT_TITLE,
+    INPUT_PLACEHOLDER,
+    INPUT_PLACEHOLDER_WAITING,
+    NEW_CONVERSATION_ICON,
+    NEW_CONVERSATION_LABEL,
+    SESSION_NOT_FOUND_TEXT,
+    SPINNER_TEXT,
+)
 
-ASSETS = Path(__file__).parent.parent / "assets"
-st.logo(str(ASSETS / "logo_wide.png"), size="large")
+st.logo(LOGO_WIDE, size="large")
 
-session_id = st.query_params.get("session") or st.session_state.get("session_id")
+
+def _go_home() -> None:
+    st.session_state.pop(SESSION_STATE_KEY, None)
+    st.query_params.clear()
+    st.switch_page(PAGE_HOME)
+
+
+session_id = st.query_params.get(SESSION_QUERY_PARAM) or st.session_state.get(SESSION_STATE_KEY)
 messages = sessions.get_messages(session_id) if session_id else None
 if messages is not None:
-    st.session_state["session_id"] = session_id
-    st.query_params["session"] = session_id
+    st.session_state[SESSION_STATE_KEY] = session_id
+    st.query_params[SESSION_QUERY_PARAM] = session_id
 
 if messages is None:
-    st.warning("Sessão não encontrada.")
-    if st.button("Nova conversa"):
-        st.session_state.pop("session_id", None)
-        st.query_params.clear()
-        st.switch_page("views/home.py")
+    st.warning(SESSION_NOT_FOUND_TEXT)
+    if st.button(NEW_CONVERSATION_LABEL):
+        _go_home()
     st.stop()
 
-st.title("Conversa")
+st.title(CHAT_TITLE)
 st.caption(f"Session ID: `{session_id}`")
-if st.sidebar.button("Nova conversa", icon=":material/add:", use_container_width=True):
-    st.session_state.pop("session_id", None)
-    st.query_params.clear()
-    st.switch_page("views/home.py")
-
-
-@st.dialog("Logs", width="large")
-def show_logs(data: dict) -> None:
-    logs = data.get("logs") or []
-    if not logs:
-        st.info("Sem logs.")
-        return
-    for entry in logs:
-        st.markdown(
-            f"`{entry.get('timestamp', '')}` **{entry.get('level', '').upper()}** "
-            f"· {entry.get('component', '')} · {entry.get('event', '')}"
-        )
-        st.write(entry.get("message", ""))
-        if entry.get("details"):
-            st.json(entry["details"], expanded=False)
-
-
-@st.dialog("Custos", width="large")
-def show_costs(data: dict) -> None:
-    metrics = data.get("usageMetrics")
-    if not metrics:
-        st.info("Sem métricas de utilização.")
-        return
-    total = metrics.get("total", {})
-    cost = total.get("estimated_cost_usd")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Custo estimado", f"${cost:.6f}" if cost is not None else "n/d")
-    c2.metric("Tokens", total.get("total_tokens", 0))
-    c3.metric("Latência", f"{total.get('latency_seconds', 0):.2f} s")
-    rows = [
-        {
-            "Componente": name,
-            "Chamadas": comp.get("calls"),
-            "Falhadas": comp.get("failed_calls"),
-            "Tokens in": comp.get("input_tokens"),
-            "Tokens out": comp.get("output_tokens"),
-            "Custo (USD)": comp.get("estimated_cost_usd"),
-            "Latência (s)": round(comp.get("latency_seconds", 0), 2),
-        }
-        for name, comp in metrics.get("components", {}).items()
-    ]
-    if rows:
-        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
-    with st.expander("Dados completos"):
-        st.json(metrics)
-
-
-@st.dialog("Evidências", width="large")
-def show_evidence(data: dict) -> None:
-    evidence = data.get("evidence") or []
-    if not evidence:
-        st.info("Sem evidências.")
-        return
-    for item in evidence:
-        with st.expander(
-            f"#{item['rank']} · {item['source']} · score {item['score']:.3f}"
-        ):
-            st.caption(f"chunk: {item['chunk_id']}")
-            if item.get("citations"):
-                st.write("Citações: " + ", ".join(item["citations"]))
-            st.text(item["content"])
-
-
-def _pick(index: int) -> None:
-    key = f"pills-{index}"
-    choice = st.session_state.get(key)
-    if choice:
-        st.session_state["open_dialog"] = (index, choice)
-    st.session_state[key] = None
-
+if st.sidebar.button(NEW_CONVERSATION_LABEL, icon=NEW_CONVERSATION_ICON, width="stretch"):
+    _go_home()
 
 for index, message in enumerate(messages):
-    if message["role"] == "user":
-        with st.chat_message("user"):
+    if message["role"] == ROLE_USER:
+        with st.chat_message(ROLE_USER):
             st.write(message["content"])
         continue
     data = message["data"]
-    with st.chat_message("assistant"):
+    with st.chat_message(message["role"]):
         if data.get("error"):
             st.error(data["error"])
         if data.get("answer"):
             st.write(data["answer"])
-        st.pills(
-            "Detalhes",
-            ["Logs", "Custos", "Evidências"],
-            key=f"pills-{index}",
-            label_visibility="collapsed",
-            on_change=_pick,
-            args=(index,),
-        )
+        render_detail_pills(index)
 
-pending = st.session_state.pop("open_dialog", None)
-if pending is not None:
-    dialog_index, choice = pending
-    dialogs = {"Logs": show_logs, "Custos": show_costs, "Evidências": show_evidence}
-    dialogs[choice](messages[dialog_index]["data"])
+open_pending_dialog(messages)
 
 awaiting = sessions.is_pending(messages)
 follow_up = st.chat_input(
-    "A aguardar resposta..." if awaiting else "Escreva a sua pergunta...",
+    INPUT_PLACEHOLDER_WAITING if awaiting else INPUT_PLACEHOLDER,
     disabled=awaiting,
 )
 if follow_up and follow_up.strip():
@@ -137,6 +71,6 @@ if follow_up and follow_up.strip():
 
 if awaiting:
     with st.chat_message("assistant"):
-        with st.spinner("A processar a pergunta..."):
+        with st.spinner(SPINNER_TEXT):
             sessions.answer_pending(session_id)
     st.rerun()
