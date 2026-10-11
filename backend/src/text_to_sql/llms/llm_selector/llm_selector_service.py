@@ -49,7 +49,10 @@ class LLMSelectorService:
                 component=COMPONENT_QUESTION_CLASSIFIER,
                 event="question_classified",
                 message="A pergunta foi classificada.",
-                details={"status": classification.status},
+                details={
+                    "status": classification.status,
+                    "normalized_query": classification.normalized_query,
+                },
             )
             if classification.status == "ambiguous":
                 self.interaction_logs.record(

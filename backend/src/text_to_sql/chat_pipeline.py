@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass, field
 
 from text_to_sql.config import Settings
@@ -5,6 +6,7 @@ from text_to_sql.constants import (
     COMPONENT_RETRIEVAL,
     COMPONENT_SQL_EXECUTION,
     COMPONENT_SQL_GENERATOR,
+    LOG_RESULT_ROWS_LIMIT,
     UNKNOWN_SOURCE,
 )
 from text_to_sql.errors import LLMError
@@ -16,6 +18,10 @@ from text_to_sql.retrieval import RetrievalConfig, RetrievalService
 from text_to_sql.sql_execution import SQLExecutionWithRetriesService
 from text_to_sql.sqlite_db import SQLiteService
 from text_to_sql.usage_metrics import UsageMetricsService
+
+
+def _as_json(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, default=str)
 
 
 @dataclass
@@ -114,6 +120,7 @@ def answer_relevant_question(
         component=COMPONENT_SQL_EXECUTION,
         event="execution_started",
         message="A execução da query SELECT começou.",
+        details={"sql": generation.sql, "parameters": _as_json(parameters)},
     )
     execution = SQLExecutionWithRetriesService(
         api_key=api_key,
@@ -138,7 +145,14 @@ def answer_relevant_question(
                 f"Erro: {execution.error or 'erro SQL não especificado'}"
             )
         ),
-        details={"attempts": execution.attempts, "error": execution.error},
+        details={
+            "attempts": execution.attempts,
+            "error": execution.error,
+            "final_sql": execution.sql,
+            "final_parameters": _as_json(execution.parameters),
+            "row_count": len(execution.rows),
+            "rows": _as_json(execution.rows[:LOG_RESULT_ROWS_LIMIT]),
+        },
     )
     if not execution.succeeded:
         return PipelineOutcome(

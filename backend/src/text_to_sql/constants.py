@@ -11,3 +11,5 @@ COMPONENT_DOCUMENT_INGESTION_EMBEDDINGS = "document_ingestion_embeddings"
 COMPONENT_LLM = "llm"
 
 UNKNOWN_SOURCE = "unknown"
+
+LOG_RESULT_ROWS_LIMIT = 20

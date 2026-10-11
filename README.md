@@ -42,3 +42,25 @@ uv run ruff check .
 
 Consulte [backend/README.md](./backend/README.md) para os detalhes da primeira etapa.
 O frontend (Streamlit) é independente, em [frontend/](./frontend/README.md).
+
+## Exemplos de prompts
+
+Em [EXAMPLE_PROMPTS.md](./EXAMPLE_PROMPTS.md) há uma lista de perguntas que pode usar
+para experimentar o assistente. Mais exemplos (com a SQL esperada) estão em
+[backend/tests/fixtures/sql_generation_examples.json](./backend/tests/fixtures/sql_generation_examples.json).
+
+## Atalhos na raiz
+
+Os comandos são iguais em PowerShell e Bash:
+
+```powershell
+uv run dev.py sync   # uv sync no backend e no frontend
+uv run dev.py        # arranca backend e frontend (Ctrl+C para parar ambos)
+```
+
+Em Bash, na raiz do repositório:
+
+```bash
+uv run dev.py sync
+uv run dev.py
+```

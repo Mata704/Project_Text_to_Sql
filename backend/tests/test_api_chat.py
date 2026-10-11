@@ -372,6 +372,9 @@ def test_chat_includes_sqlite_failure_reason_in_response_and_logs(monkeypatch) -
         def execute(self, **_kwargs):
             return SimpleNamespace(
                 succeeded=False,
+                sql="SELECT atraso FROM viagens;",
+                parameters={},
+                rows=[],
                 attempts=3,
                 error=sqlite_error,
             )
@@ -411,4 +414,8 @@ def test_chat_includes_sqlite_failure_reason_in_response_and_logs(monkeypatch) -
     assert execution_log["details"] == {
         "attempts": 3,
         "error": sqlite_error,
+        "final_sql": "SELECT atraso FROM viagens;",
+        "final_parameters": "{}",
+        "row_count": 0,
+        "rows": "[]",
     }
