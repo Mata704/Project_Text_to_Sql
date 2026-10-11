@@ -31,12 +31,17 @@ def test_first_stage_result_requires_clarification_only_for_ambiguous() -> None:
             status="ambiguous",
             normalized_query="Quantas viagens?",
         )
-    with pytest.raises(ValidationError, match="Only ambiguous"):
-        QuestionClassificationResult(
-            status="relevant",
-            normalized_query="Quantas viagens?",
-            clarification_question="Em que data?",
-        )
+    coerced = QuestionClassificationResult(
+        status="relevant",
+        normalized_query="Quantas viagens?",
+        clarification_question="Em que data?",
+    )
+    assert coerced.status == "ambiguous"
+    assert coerced.clarification_question == "Em que data?"
+    dropped = QuestionClassificationResult(
+        status="irrelevant", normalized_query="fora", clarification_question="Quer?"
+    )
+    assert dropped.clarification_question is None
 
 
 def test_classifier_sends_history_and_current_question_without_database_schema() -> None:

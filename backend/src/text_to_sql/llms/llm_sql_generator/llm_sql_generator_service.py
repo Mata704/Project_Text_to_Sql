@@ -92,6 +92,7 @@ class LLMSQLGeneratorService:
             try:
                 result = self._validate_citations(result, evidence)
                 parameters = {parameter.name: parameter.value for parameter in result.parameters}
+                self._validate_delay_record_type(question, result.sql)
                 self.sqlite_service.validate_select(result.sql, parameters)
             except (LLMError, SQLiteDatabaseError) as error:
                 retry_feedback = f"Query rejeitada. Motivo: {error}"
@@ -111,6 +112,23 @@ class LLMSQLGeneratorService:
             f"Após {MAX_SQL_GENERATION_ATTEMPTS} tentativas. "
             f"Último motivo: {retry_feedback or 'o modelo não gerou uma query válida.'}"
         )
+
+    def _validate_delay_record_type(self, question: str, sql: str) -> None:
+        lowered_sql = sql.lower()
+        if "registos_atraso" not in lowered_sql or "atraso_minutos" not in lowered_sql:
+            return
+        if "tipo_registo" not in lowered_sql:
+            raise LLMError(
+                "a query lê registos_atraso sem filtrar tipo_registo; cada viagem tem "
+                "um registo de Partida e outro de Chegada. Filtra tipo_registo = 'Chegada' "
+                "(ou 'Partida' se a pergunta o pedir)."
+            )
+        asks_departure = "partida" in question.lower()
+        if not asks_departure and "'partida'" in lowered_sql and "'chegada'" not in lowered_sql:
+            raise LLMError(
+                "a query usa apenas registos de Partida, mas a pergunta não pede atraso de "
+                "partida. Usa tipo_registo = 'Chegada'."
+            )
 
     def _format_evidence(self, evidence: Sequence[RetrievedChunk]) -> str:
         return "\n\n".join(

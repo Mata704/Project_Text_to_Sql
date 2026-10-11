@@ -58,3 +58,24 @@ def test_history_skips_answers_without_text(fake_api, fresh_store) -> None:
     sessions.answer_pending(session_id)
 
     assert fake_api[-1][1] == [{"role": "user", "content": "p1"}]
+
+
+def test_store_evicts_oldest_sessions(fresh_store) -> None:
+    ids = [sessions.start_session(f"q{n}") for n in range(60)]
+
+    assert len(fresh_store) == 50
+    assert sessions.get_messages(ids[0]) is None
+    assert sessions.get_messages(ids[-1]) is not None
+
+
+def test_session_messages_are_capped(fake_api) -> None:
+    session_id = sessions.start_session("q0")
+    sessions.answer_pending(session_id)
+    for n in range(1, 40):
+        sessions.add_question(session_id, f"q{n}")
+        sessions.answer_pending(session_id)
+
+    messages = sessions.get_messages(session_id)
+    assert len(messages) <= 40
+    assert messages[0]["role"] == "user"
+    assert messages[-1]["data"]["answer"] == "resposta a q39"
