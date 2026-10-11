@@ -9,7 +9,6 @@ st.set_page_config(
     page_icon=str(ASSETS / "logo_square.png"),
     layout="centered",
 )
-st.logo(str(ASSETS / "logo_wide.png"), size="large")
 
 pages = [
     st.Page("views/home.py", title="Início", default=True),

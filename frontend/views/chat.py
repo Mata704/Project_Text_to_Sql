@@ -1,7 +1,12 @@
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
 
 import sessions
+
+ASSETS = Path(__file__).parent.parent / "assets"
+st.logo(str(ASSETS / "logo_wide.png"), size="large")
 
 session_id = st.query_params.get("session") or st.session_state.get("session_id")
 messages = sessions.get_messages(session_id) if session_id else None
@@ -121,8 +126,17 @@ if pending is not None:
     dialogs = {"Logs": show_logs, "Custos": show_costs, "Evidências": show_evidence}
     dialogs[choice](messages[dialog_index]["data"])
 
-follow_up = st.chat_input("Escreva a sua pergunta...")
+awaiting = sessions.is_pending(messages)
+follow_up = st.chat_input(
+    "A aguardar resposta..." if awaiting else "Escreva a sua pergunta...",
+    disabled=awaiting,
+)
 if follow_up and follow_up.strip():
-    with st.spinner("A processar a pergunta..."):
-        sessions.add_turn(session_id, follow_up.strip())
+    sessions.add_question(session_id, follow_up.strip())
+    st.rerun()
+
+if awaiting:
+    with st.chat_message("assistant"):
+        with st.spinner("A processar a pergunta..."):
+            sessions.answer_pending(session_id)
     st.rerun()

@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 import streamlit as st
 
 import api_client
@@ -14,14 +16,18 @@ def get_messages(session_id: str) -> list[dict] | None:
 
 
 def start_session(question: str) -> str:
-    """Sends the first question; the API's sessionId becomes the page's session."""
-    result = api_client.ask(question)
-    session_id = result.get("sessionId") or f"local-{len(_store()) + 1}"
-    _store()[session_id] = [
-        {"role": "user", "content": question},
-        {"role": "assistant", "data": result},
-    ]
+    session_id = str(uuid4())
+    _store()[session_id] = [{"role": "user", "content": question}]
     return session_id
+
+
+def add_question(session_id: str, question: str) -> None:
+    _store()[session_id].append({"role": "user", "content": question})
+
+
+def is_pending(messages: list[dict]) -> bool:
+    """A conversation awaits the API whenever its last message is the user's."""
+    return bool(messages) and messages[-1]["role"] == "user"
 
 
 def _history(messages: list[dict], limit: int = 10) -> list[dict[str, str]]:
@@ -34,8 +40,7 @@ def _history(messages: list[dict], limit: int = 10) -> list[dict[str, str]]:
     return history[-limit:]
 
 
-def add_turn(session_id: str, question: str) -> None:
+def answer_pending(session_id: str) -> None:
     messages = _store()[session_id]
-    result = api_client.ask(question, _history(messages))
-    messages.append({"role": "user", "content": question})
+    result = api_client.ask(messages[-1]["content"], _history(messages[:-1]))
     messages.append({"role": "assistant", "data": result})
