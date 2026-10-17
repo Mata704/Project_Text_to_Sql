@@ -3,7 +3,6 @@ HOME_HEADER = "Pergunte sobre comboios"
 HOME_CAPTION = "Escreva a sua pergunta para iniciar uma nova sessão."
 HOME_STYLE = (
     "<style>.block-container{padding-top:3rem;max-width:960px}"
-    "[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl'],"
     "[data-testid='stLogo']{display:none}"
     "[data-testid='stHeading'],[data-testid='stCaptionContainer']"
     "{text-align:center;justify-content:center}</style>"

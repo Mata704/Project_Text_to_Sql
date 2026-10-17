@@ -1,6 +1,7 @@
 # Text to SQL - Backend
 
-Backend Text-to-SQL exposto por uma API FastAPI (`GET /health` e `POST /chat`).
+Backend Text-to-SQL exposto por uma API FastAPI (`GET /health`, endpoints de
+sessão e `POST /chat`).
 
 ## Requisitos
 
@@ -386,9 +387,25 @@ falhar, o servidor não arranca.
   Responde `200` quando há resposta (incluindo fora do âmbito e pedidos de
   clarificação, bem como respostas parciais quando uma consulta falha) e `422`
   quando a interação termina com `error` ou o pedido é inválido.
+- `POST /sessions` cria uma conversa vazia ou a partir de
+  `{"question": "..."}` e devolve o respetivo `sessionId`.
+- `GET /sessions` lista as sessões disponíveis, com título e data da última
+  atualização.
+- `GET /sessions/{sessionId}` lê o histórico.
+- `POST /sessions/{sessionId}/questions` acrescenta uma pergunta.
+- `POST /sessions/{sessionId}/answer` processa a pergunta pendente.
+- `DELETE /sessions/{sessionId}` elimina apenas a conversa selecionada. O
+  histórico é guardado num ficheiro JSON sem extensão em
+  `data/sessions/<sessionId>`, não
+  na memória do frontend.
 
-Cada pedido ao `/chat` é independente: o classificador devolve uma lista de
-classificações estruturadas com `status` (`relevant`, `irrelevant` ou
+O frontend lista as sessões na barra lateral em ambas as páginas. **Nova
+conversa** cria uma nova sessão sem apagar as anteriores; selecionar uma sessão
+abre o respetivo chat e o botão de eliminação remove apenas essa sessão.
+O frontend usa os endpoints de sessão para guardar o histórico e gerar contexto
+entre perguntas. `POST /chat` continua disponível como operação independente:
+o classificador devolve uma lista de classificações estruturadas com `status`
+(`relevant`, `irrelevant` ou
 `ambiguous`), `normalized_query` e `clarification_question`, uma por cada
 pergunta distinta feita pelo utilizador. O histórico só é usado para resolver
 referências, não para acrescentar pedidos; se uma clarificação suspender um
@@ -471,7 +488,7 @@ src/text_to_sql/
 ├── __main__.py               # Arranque do servidor (uvicorn)
 ├── chat_pipeline.py          # Percurso relevante: retrieval, SQL, execução, interpretação
 ├── api/
-│   ├── server.py             # App FastAPI: /health e /chat
+│   ├── server.py             # App FastAPI: saúde, sessões e chat
 │   └── chat.py               # Arranque (BD + RAG) e orquestração de um pedido
 ├── config.py                 # Configuração OpenAI
 ├── errors.py                 # Erros de configuração e LLM
@@ -534,8 +551,7 @@ src/text_to_sql/
 
 A base SQLite de exemplo fica em `data/` e é sincronizada no arranque da API.
 A recuperação RAG, a geração e execução SQL e a reparação limitada de queries
-estão ligadas ao endpoint `POST /chat`. O frontend será adicionado numa fase
-seguinte.
+estão ligadas ao endpoint `POST /chat` e ao endpoint de resposta das sessões.
 
 O endpoint `/chat` classifica a pergunta com a OpenAI e, apenas para perguntas
 relevantes, recupera evidências, gera SQL fundamentado, consulta a base SQLite

@@ -1,9 +1,7 @@
 # Text to SQL
 
-Repositório organizado em aplicações independentes. O backend e o frontend
-terão os seus próprios diretórios e ambientes; nesta fase, apenas o backend está
-a ser desenvolvido. A API FastAPI e a aplicação Streamlit serão adicionadas
-posteriormente e executadas separadamente.
+Repositório organizado em aplicações independentes, com backend FastAPI e
+frontend Streamlit executados separadamente.
 
 ```text
 backend/   Backend Python: primeira etapa LLM e testes
@@ -28,8 +26,11 @@ uv run text-to-sql
 
 O programa classifica a pergunta e, quando relevante, usa RAG para gerar e
 executar uma query SQLite somente de leitura. Expõe uma API FastAPI em
-`http://127.0.0.1:8000` com `GET /health` e `POST /chat` (corpo
-`{"question": "..."}`). Se a execução falhar, o backend
+`http://127.0.0.1:8000` com endpoints para saúde, conversas e processamento de
+perguntas. O histórico de cada conversa é persistido pelo backend em
+`backend/data/sessions/<sessionId>`. **Nova conversa** cria uma nova sessão
+sem eliminar as anteriores; a barra lateral permite abrir ou eliminar sessões.
+Se a execução falhar, o backend
 tenta repará-la com uma LLM até ao limite de três execuções no total. Consulte
 [backend/README.md](./backend/README.md) para detalhes.
 Se a porta 8000 estiver ocupada, defina `TEXT_TO_SQL_PORT` para outra porta

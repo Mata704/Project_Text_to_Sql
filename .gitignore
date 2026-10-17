@@ -5,6 +5,7 @@ __pycache__/
 *.sqlite
 *.sqlite3
 *.db
+backend/data/sessions/
 backend/data/
 backend/data/chroma/
 .pytest_cache/

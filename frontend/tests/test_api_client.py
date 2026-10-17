@@ -75,3 +75,41 @@ def test_ask_keeps_api_error_payload(monkeypatch) -> None:
         requests, "post", lambda *a, **k: _Response(status_code=422, payload=payload)
     )
     assert api_client.ask("x") == payload
+
+
+def test_create_empty_session_sends_empty_payload(monkeypatch) -> None:
+    sent = {}
+    monkeypatch.setattr(
+        requests,
+        "request",
+        lambda method, url, json, timeout: (
+            sent.update(
+                method=method,
+                url=url,
+                json=json,
+            )
+            or _Response(status_code=201, payload={"sessionId": "s", "messages": []})
+        ),
+    )
+
+    result = api_client.create_session()
+
+    assert result["messages"] == []
+    assert sent["method"] == "POST"
+    assert sent["url"].endswith("/sessions")
+    assert sent["json"] == {}
+
+
+def test_list_sessions_gets_backend_session_list(monkeypatch) -> None:
+    expected = [{"sessionId": "s", "title": "pergunta", "updatedAt": "now"}]
+    sent = {}
+    monkeypatch.setattr(
+        requests,
+        "request",
+        lambda method, url, json, timeout: (
+            sent.update(method=method, url=url) or _Response(payload=expected)
+        ),
+    )
+
+    assert api_client.list_sessions() == expected
+    assert sent == {"method": "GET", "url": f"{api_client.API_BASE_URL}/sessions"}

@@ -1,14 +1,8 @@
 import streamlit as st
 
+import api_client
 import sessions
-from about import show_about
-from about.constants import (
-    ABOUT_BUTTON_ICON,
-    ABOUT_BUTTON_KEY,
-    ABOUT_BUTTON_LABEL,
-    ABOUT_BUTTON_STYLE,
-)
-from constants import LOGO_WIDE, PAGE_CHAT, SESSION_STATE_KEY
+from constants import LOGO_WIDE, PAGE_CHAT, SESSION_QUERY_PARAM, SESSION_STATE_KEY
 from views.constants import (
     HOME_CAPTION,
     HOME_HEADER,
@@ -16,8 +10,15 @@ from views.constants import (
     HOME_STYLE,
     INPUT_PLACEHOLDER,
 )
+from views.session_sidebar import render_session_sidebar
 
 st.markdown(HOME_STYLE, unsafe_allow_html=True)
+render_session_sidebar(
+    on_chat_page=False,
+    current_session_id=(
+        st.query_params.get(SESSION_QUERY_PARAM) or st.session_state.get(SESSION_STATE_KEY)
+    ),
+)
 
 _, logo_col, _ = st.columns(HOME_LOGO_COLUMNS)
 logo_col.image(LOGO_WIDE, width="stretch")
@@ -27,9 +28,10 @@ st.caption(HOME_CAPTION)
 
 question = st.chat_input(INPUT_PLACEHOLDER)
 
-st.markdown(ABOUT_BUTTON_STYLE, unsafe_allow_html=True)
-if st.button(ABOUT_BUTTON_LABEL, icon=ABOUT_BUTTON_ICON, key=ABOUT_BUTTON_KEY):
-    show_about()
 if question and question.strip():
-    st.session_state[SESSION_STATE_KEY] = sessions.start_session(question.strip())
-    st.switch_page(PAGE_CHAT)
+    try:
+        st.session_state[SESSION_STATE_KEY] = sessions.start_session(question.strip())
+    except api_client.ApiClientError as error:
+        st.error(str(error))
+    else:
+        st.switch_page(PAGE_CHAT)

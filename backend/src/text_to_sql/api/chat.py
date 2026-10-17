@@ -47,8 +47,9 @@ def answer_chat(
     question: str,
     runtime: ChatRuntime,
     history: Sequence[ConversationMessage] = (),
+    session_id: str | None = None,
 ) -> InteractionResponse:
-    interaction_logs = InteractionLogService()
+    interaction_logs = InteractionLogService(session_id=session_id)
     usage_metrics = UsageMetricsService(session_id=interaction_logs.session_id)
     answer: str | None = None
     error_message: str | None = None

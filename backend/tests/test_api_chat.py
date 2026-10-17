@@ -6,6 +6,9 @@ from pydantic import SecretStr
 
 from text_to_sql.api import create_app
 from text_to_sql.document_ingestion import DocumentIngestionConfig
+from text_to_sql.interaction_logs import InteractionResponse
+from text_to_sql.sessions import SessionStore
+from text_to_sql.usage_metrics import UsageMetricsService
 
 
 def _post_chat(question: str) -> tuple[int, dict]:
@@ -29,7 +32,96 @@ def test_chat_rejects_empty_question(monkeypatch) -> None:
         assert client.post("/chat", json={}).status_code == 422
 
 
-@pytest.mark.parametrize("count", [0, 15])
+def test_session_api_persists_and_deletes_conversation(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("text_to_sql.api.server.prepare_runtime", lambda: _fake_runtime())
+    session_store = SessionStore(tmp_path)
+    app = create_app(session_store=session_store)
+    with TestClient(app) as client:
+        created = client.post("/sessions", json={"question": "  p1  "})
+        session_id = created.json()["sessionId"]
+
+        assert created.status_code == 201
+        assert created.json()["messages"] == [{"role": "user", "content": "p1"}]
+        assert (tmp_path / session_id).is_file()
+
+        added = client.post(
+            f"/sessions/{session_id}/questions",
+            json={"question": "p2"},
+        )
+        assert added.status_code == 409
+
+        session_store.add_answer(session_id, {"answer": "r1"})
+        added = client.post(
+            f"/sessions/{session_id}/questions",
+            json={"question": "p2"},
+        )
+        assert added.status_code == 200
+        assert added.json()["messages"][-1] == {"role": "user", "content": "p2"}
+
+        assert client.delete(f"/sessions/{session_id}").status_code == 204
+        assert not (tmp_path / session_id).exists()
+        assert client.get(f"/sessions/{session_id}").status_code == 404
+        assert client.get("/sessions/inexistente").status_code == 404
+
+
+def test_sessions_api_lists_sessions_and_creates_empty_chat(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("text_to_sql.api.server.prepare_runtime", lambda: _fake_runtime())
+    app = create_app(session_store=SessionStore(tmp_path))
+    with TestClient(app) as client:
+        created = client.post("/sessions", json={})
+        session_id = created.json()["sessionId"]
+        listed = client.get("/sessions")
+
+    assert created.status_code == 201
+    assert created.json()["messages"] == []
+    assert listed.status_code == 200
+    assert listed.json()[0]["sessionId"] == session_id
+    assert listed.json()[0]["title"] == "Nova conversa"
+
+
+def test_answer_session_uses_persisted_history_and_session_id(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr("text_to_sql.api.server.prepare_runtime", lambda: _fake_runtime())
+    store = SessionStore(tmp_path)
+    app = create_app(session_store=store)
+    seen: list[tuple[str, list, str]] = []
+
+    def fake_answer_chat(question, _runtime, history, session_id=None):
+        seen.append((question, [message.model_dump() for message in history], session_id))
+        return InteractionResponse(
+            session_id=session_id,
+            question=question,
+            answer=f"resposta a {question}",
+            usage_metrics=UsageMetricsService(session_id=session_id).snapshot(),
+        )
+
+    monkeypatch.setattr("text_to_sql.api.server.answer_chat", fake_answer_chat)
+    with TestClient(app) as client:
+        created = client.post("/sessions", json={"question": "p1"}).json()
+        session_id = created["sessionId"]
+        client.post(f"/sessions/{session_id}/answer")
+        client.post(f"/sessions/{session_id}/questions", json={"question": "p2"})
+        response = client.post(f"/sessions/{session_id}/answer")
+
+    assert response.status_code == 200
+    assert response.json()["sessionId"] == session_id
+    assert seen == [
+        ("p1", [], session_id),
+        (
+            "p2",
+            [
+                {"role": "user", "content": "p1"},
+                {"role": "assistant", "content": "resposta a p1"},
+            ],
+            session_id,
+        ),
+    ]
+    assert store.get(session_id)[-1]["data"]["answer"] == "resposta a p2"
+
+
+@pytest.mark.parametrize("count", [0, 15, 50])
 def test_chat_passes_only_last_ten_history_messages(monkeypatch, count: int) -> None:
     received: list = []
 

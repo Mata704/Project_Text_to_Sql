@@ -1,14 +1,7 @@
-ABOUT_BUTTON_LABEL = " "
+ABOUT_BUTTON_LABEL = "Sobre o projeto"
 ABOUT_BUTTON_ICON = ":material/info:"
 ABOUT_BUTTON_HELP = "Sobre o projeto"
 ABOUT_BUTTON_KEY = "about_button"
-ABOUT_BUTTON_STYLE = (
-    "<style>.st-key-about_button{position:fixed;top:0.75rem;left:1rem;z-index:1000001}"
-    ".st-key-about_button button{width:2.5rem;height:2.5rem;min-height:0;padding:0;"
-    "border-radius:50%;display:flex;align-items:center;justify-content:center}"
-    ".st-key-about_button button [data-testid='stMarkdownContainer']{display:none}"
-    ".st-key-about_button button span{margin:0}</style>"
-)
 ABOUT_DIALOG_TITLE = "Sobre o projeto"
 ABOUT_DIALOG_WIDTH = "large"
 ABOUT_PROJECT_TITLE = "Sistema de Consulta de Dados Ferroviários em Linguagem Natural"
