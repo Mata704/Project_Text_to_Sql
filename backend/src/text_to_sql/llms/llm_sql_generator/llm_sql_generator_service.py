@@ -1,5 +1,6 @@
 import re
 from collections.abc import Sequence
+from difflib import SequenceMatcher
 
 from text_to_sql.constants import COMPONENT_SQL_GENERATOR, UNKNOWN_SOURCE
 from text_to_sql.errors import LLMError, SQLiteDatabaseError
@@ -12,6 +13,7 @@ from text_to_sql.llms.common import (
 from text_to_sql.llms.llm_sql_generator.constants import (
     DEFAULT_SQL_GENERATION_MODEL,
     MAX_SQL_GENERATION_ATTEMPTS,
+    QUOTE_MIN_SIMILARITY,
     SQL_GENERATION_FAILURE_MESSAGE,
     SQL_GENERATION_INSTRUCTIONS,
 )
@@ -196,11 +198,15 @@ class LLMSQLGeneratorService:
                 continue
             quote = self._normalize_quote(citation.quote)
             if not quote or quote not in self._normalize_quote(content):
-                invalid_reasons.append(
-                    f"OpenAI returned a quote that is not present in "
-                    f"{citation.source} / {citation.chunk_id}."
-                )
-                continue
+                closest_line = self._closest_line(citation.quote, content)
+                if closest_line is None:
+                    invalid_reasons.append(
+                        f"OpenAI returned a quote that is not present in "
+                        f"{citation.source} / {citation.chunk_id}."
+                    )
+                    continue
+                # A fonte é válida; substitui a citação inexata pela linha real mais próxima.
+                citation = citation.model_copy(update={"quote": closest_line})
             valid_citations.append(citation)
 
         if not valid_citations:
@@ -229,4 +235,20 @@ class LLMSQLGeneratorService:
         return citation
 
     def _normalize_quote(self, text: str) -> str:
-        return re.sub(r"\s+", " ", text).strip().casefold()
+        without_markup = re.sub(r"[`*_|]", " ", text)
+        return re.sub(r"\s+", " ", without_markup).strip().casefold()
+
+    def _closest_line(self, quote: str, content: str) -> str | None:
+        normalized_quote = self._normalize_quote(quote)
+        if not normalized_quote:
+            return None
+        best_line: str | None = None
+        best_ratio = QUOTE_MIN_SIMILARITY
+        for line in content.splitlines():
+            normalized_line = self._normalize_quote(line)
+            if not normalized_line:
+                continue
+            ratio = SequenceMatcher(None, normalized_quote, normalized_line).ratio()
+            if ratio >= best_ratio:
+                best_line, best_ratio = line.strip(), ratio
+        return best_line

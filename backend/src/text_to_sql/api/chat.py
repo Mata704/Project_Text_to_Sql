@@ -7,6 +7,7 @@ from text_to_sql.config import Settings
 from text_to_sql.constants import COMPONENT_INTERACTION
 from text_to_sql.document_ingestion import DocumentIngestionConfig, DocumentIngestionService
 from text_to_sql.embeddings import EmbeddingConfig
+from text_to_sql.entity_resolution import EntityResolutionService
 from text_to_sql.errors import ConfigurationError, TextToSQLError
 from text_to_sql.interaction_logs import (
     InteractionEvidence,
@@ -61,6 +62,7 @@ def answer_chat(
             model=runtime.settings.openai_model,
             usage_metrics=usage_metrics,
             interaction_logs=interaction_logs,
+            entity_resolver=EntityResolutionService(),
         ).run(question, history[-HISTORY_MESSAGES_LIMIT:])
 
         ambiguous_classifications = [

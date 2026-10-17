@@ -403,3 +403,30 @@ def test_sql_generator_rejects_quote_not_present_in_cited_chunk() -> None:
     with pytest.raises(LLMError, match="Não foi possível gerar uma query SQL segura"):
         service.generate("Quantas viagens existem?", _evidence())
     assert mock_client.responses.parse.call_count == 3
+
+
+def test_sql_generator_maps_inexact_quote_to_closest_chunk_line() -> None:
+    generated = SQLGenerationResult(
+        answerable=True,
+        sql="SELECT COUNT(*) FROM viagens",
+        explanation="Conta viagens.",
+        citations=[
+            {
+                "source": "01-schema.md",
+                "chunk_id": "schema-1",
+                "quote": "`viagens`: comboio, data, origem e destino",
+            }
+        ],
+    )
+    mock_client = Mock()
+    mock_client.responses.parse.return_value = Mock(output_parsed=generated)
+    with patch("text_to_sql.llms.common.OpenAI", return_value=mock_client):
+        service = LLMSQLGeneratorService(api_key="test-key")
+
+    content = (
+        "Tabelas:\n- `viagens`: comboio, data, origem, destino e estado.\n- `estacoes`: nomes."
+    )
+    result = service.generate("Quantas viagens existem?", _evidence(content))
+
+    assert result.citations[0].quote == "- `viagens`: comboio, data, origem, destino e estado."
+    assert mock_client.responses.parse.call_count == 1

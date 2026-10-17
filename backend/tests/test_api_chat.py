@@ -262,6 +262,7 @@ def test_cli_retrieves_only_relevant_questions(
             model: str,
             usage_metrics=None,
             interaction_logs=None,
+            entity_resolver=None,
         ) -> None:
             self.kwargs = {"api_key": api_key, "model": model}
             self.usage_metrics = usage_metrics

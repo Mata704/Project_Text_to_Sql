@@ -74,6 +74,11 @@ SQL_GENERATION_INSTRUCTIONS = (
     "várias linhas (por exemplo, um comboio com várias viagens). Se a "
     "pergunta se refere a uma viagem concreta, filtra por essa viagem "
     "(código do comboio e data) em vez de escolher uma linha arbitrária.\n\n"
+    "8c. Horários\n"
+    "Os serviços repetem-se todos os dias. Numa pergunta sobre horários, "
+    "filtra por data_viagem quando a data é conhecida; se não for, devolve "
+    "um dia só (a data mais baixa disponível) em vez de todo o período, e "
+    "ordena por hora_partida_prevista.\n\n"
     "9. Comparação entre dois registos do mesmo evento\n"
     "Quando for necessário comparar dois registos do mesmo evento "
     "(por exemplo, partida e chegada):\n"
@@ -173,6 +178,7 @@ SQL_GENERATION_INSTRUCTIONS = (
 )
 DEFAULT_SQL_GENERATION_MODEL = DEFAULT_LLM_MODEL
 MAX_SQL_GENERATION_ATTEMPTS = 3
+QUOTE_MIN_SIMILARITY = 0.6
 SQL_GENERATION_FAILURE_MESSAGE = (
     "Não foi possível gerar uma query SQL segura. Reformule a pergunta."
 )
