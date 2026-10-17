@@ -7,6 +7,7 @@ from text_to_sql.llms.llm_result_interpreter.constants import (
     RESULT_INTERPRETATION_INSTRUCTIONS,
 )
 from text_to_sql.llms.llm_result_interpreter.llm_result_interpreter_model import (
+    QuestionResult,
     ResultInterpretation,
 )
 from text_to_sql.usage_metrics import UsageMetricsService
@@ -25,16 +26,13 @@ class LLMResultInterpreterService:
 
     def interpret(
         self,
-        question: str,
-        rows: Sequence[dict[str, object]],
+        results: Sequence[QuestionResult],
     ) -> str:
-        question = question.strip()
-        if not question:
-            raise ValueError("The result interpretation question cannot be empty.")
+        if not results:
+            raise ValueError("At least one question result is required for interpretation.")
 
         response_input = (
-            f"Pergunta original:\n{question}\n\n"
-            f"Resultados obtidos pela execução SQL:\n{list(rows)!r}"
+            f"Perguntas relevantes e resultados das respetivas consultas:\n{list(results)!r}"
         )
         interpretation = parse_structured_response(
             self.client,

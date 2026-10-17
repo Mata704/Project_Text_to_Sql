@@ -368,22 +368,39 @@ Bash:
 uv run text-to-sql
 ```
 
-O comando arranca a API FastAPI em `http://127.0.0.1:8000`. No arranque,
-sincroniza a base SQLite de exemplo e a documentação RAG; se isso falhar, o
-servidor não arranca.
+O comando arranca a API FastAPI em `http://127.0.0.1:8000` por omissão. Se a
+porta estiver ocupada, defina `TEXT_TO_SQL_PORT` antes de iniciar, por exemplo:
+
+```powershell
+$env:TEXT_TO_SQL_PORT = "8001"
+uv run text-to-sql
+```
+
+Nesse caso, configure também o frontend com
+`$env:API_BASE_URL = "http://127.0.0.1:8001"` antes de o iniciar. No arranque,
+o backend sincroniza a base SQLite de exemplo e a documentação RAG; se isso
+falhar, o servidor não arranca.
 
 - `GET /health` devolve `{"status": "ok"}`.
 - `POST /chat` recebe `{"question": "..."}` e devolve o JSON descrito acima.
   Responde `200` quando há resposta (incluindo fora do âmbito e pedidos de
-  clarificação) e `422` quando há `error` (pergunta vazia, ou falha da geração
-  ou execução SQL após as tentativas).
+  clarificação, bem como respostas parciais quando uma consulta falha) e `422`
+  quando a interação termina com `error` ou o pedido é inválido.
 
-Cada pedido ao `/chat` é independente: o classificador devolve um objeto
-estruturado com `status` (`relevant`, `irrelevant` ou `ambiguous`),
-`normalized_query` e `clarification_question`. Só perguntas relevantes seguem
-para retrieval, geração SQL e consulta SQLite; num pedido ambíguo a resposta é
-a pergunta de clarificação e o cliente envia nova pergunta em novo pedido. Só o
-classificador faz perguntas ao utilizador.
+Cada pedido ao `/chat` é independente: o classificador devolve uma lista de
+classificações estruturadas com `status` (`relevant`, `irrelevant` ou
+`ambiguous`), `normalized_query` e `clarification_question`, uma por cada
+pergunta distinta feita pelo utilizador. O histórico só é usado para resolver
+referências, não para acrescentar pedidos; se uma clarificação suspender um
+pedido com várias partes, os pedidos originais ainda pendentes são retomados
+quando o utilizador esclarece a dúvida. As perguntas relevantes são processadas
+individualmente e os resultados são combinados numa única resposta.
+Se existir alguma pergunta ambígua, a resposta pede apenas a clarificação e
+adia o processamento das relevantes; perguntas irrelevantes são ignoradas
+quando existem perguntas relevantes. Se algumas consultas falharem, o intérprete
+explica essas partes e responde com os resultados das restantes; se todas
+falharem, a interação devolve um erro. Só o classificador faz perguntas ao
+utilizador.
 As instruções do selector tratam a pergunta e o histórico como conteúdo não
 fiável e limitam o modelo à classificação ferroviária. Um filtro regex remove
 expressões comuns de tentativa de alteração ou revelação do prompt antes de

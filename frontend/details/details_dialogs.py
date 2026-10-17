@@ -69,7 +69,12 @@ def show_evidence(data: dict) -> None:
     if not evidence:
         st.info(NO_EVIDENCE_TEXT)
         return
+    current_question = None
     for item in evidence:
+        question = item.get("question")
+        if question and question != current_question:
+            st.markdown(f"**Pergunta:** {question}")
+            current_question = question
         with st.expander(f"#{item['rank']} · {item['source']} · score {item['score']:.3f}"):
             st.caption(f"chunk: {item['chunk_id']}")
             if item.get("citations"):

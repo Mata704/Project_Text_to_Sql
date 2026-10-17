@@ -39,9 +39,11 @@ def test_chat_passes_only_last_ten_history_messages(monkeypatch, count: int) -> 
 
         def run(self, _question: str, history=()):
             received.extend(history)
-            return SimpleNamespace(
-                status="irrelevant", normalized_query="fora", clarification_question=None
-            )
+            return [
+                SimpleNamespace(
+                    status="irrelevant", normalized_query="fora", clarification_question=None
+                )
+            ]
 
     monkeypatch.setattr("text_to_sql.api.server.prepare_runtime", lambda: _fake_runtime())
     monkeypatch.setattr("text_to_sql.api.chat.LLMSelectorService", FakeSelector)
@@ -54,11 +56,60 @@ def test_chat_passes_only_last_ten_history_messages(monkeypatch, count: int) -> 
     assert [m.content for m in received] == [f"m{i}" for i in range(count)][-10:]
 
 
+@pytest.mark.parametrize(
+    ("statuses", "expected_answer", "expected_processed"),
+    [
+        (["relevant", "ambiguous"], "Qual a data?", []),
+        (["irrelevant", "ambiguous"], "Qual a data?", []),
+        (["relevant", "irrelevant"], "Resposta conjunta.", ["relevant"]),
+    ],
+)
+def test_chat_applies_multi_question_priority_rules(
+    monkeypatch,
+    statuses: list[str],
+    expected_answer: str,
+    expected_processed: list[str],
+) -> None:
+    classifications = [
+        SimpleNamespace(
+            status=status,
+            normalized_query=f"Pedido {index}",
+            clarification_question="Qual a data?" if status == "ambiguous" else None,
+        )
+        for index, status in enumerate(statuses, start=1)
+    ]
+    processed: list[list[SimpleNamespace]] = []
+
+    class FakeSelector:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def run(self, _question: str, _history=()):
+            return classifications
+
+    def fake_answer_relevant_questions(*, classifications, **_kwargs):
+        processed.append(list(classifications))
+        return SimpleNamespace(answer="Resposta conjunta.", failure=None, evidences=[])
+
+    monkeypatch.setattr("text_to_sql.api.server.prepare_runtime", lambda: _fake_runtime())
+    monkeypatch.setattr("text_to_sql.api.chat.LLMSelectorService", FakeSelector)
+    monkeypatch.setattr(
+        "text_to_sql.api.chat.answer_relevant_questions",
+        fake_answer_relevant_questions,
+    )
+
+    status_code, response = _post_chat("várias perguntas")
+
+    assert status_code == 200
+    assert response["answer"] == expected_answer
+    assert [item.status for group in processed for item in group] == expected_processed
+
+
 def _fake_runtime():
     return SimpleNamespace(
         settings=SimpleNamespace(openai_model="m"),
         api_key="k",
-        ingestion_config=None,
+        ingestion_config=DocumentIngestionConfig(),
     )
 
 
@@ -139,11 +190,13 @@ def test_cli_retrieves_only_relevant_questions(
                 message="A pergunta foi classificada.",
                 details={"status": status},
             )
-            return SimpleNamespace(
-                status=status,
-                normalized_query="Pergunta normalizada?",
-                clarification_question="Que data?" if status == "ambiguous" else None,
-            )
+            return [
+                SimpleNamespace(
+                    status=status,
+                    normalized_query="Pergunta normalizada?",
+                    clarification_question="Que data?" if status == "ambiguous" else None,
+                )
+            ]
 
     class FakeRetrievalService:
         def __init__(self, api_key: str, config, usage_metrics=None) -> None:
@@ -208,8 +261,8 @@ def test_cli_retrieves_only_relevant_questions(
                 )
             )
 
-        def interpret(self, question: str, rows: list[dict[str, object]]) -> str:
-            calls.append(({"rows": rows}, question))
+        def interpret(self, results) -> str:
+            calls.append(({"results": results}, "result-interpretation"))
             return "Foram encontradas 42 viagens."
 
     monkeypatch.setattr(
@@ -280,6 +333,7 @@ def test_cli_retrieves_only_relevant_questions(
         assert response["evidence"] == [
             {
                 "rank": 1,
+                "question": "Pergunta normalizada?",
                 "source": "tables/viagens.md",
                 "chunk_id": "viagens-001",
                 "score": 0.91,
@@ -306,8 +360,16 @@ def test_cli_retrieves_only_relevant_questions(
             "result-interpreter-init",
         )
         assert calls[11] == (
-            {"rows": [{"total_viagens": 42}]},
-            "Quantas viagens?",
+            {
+                "results": [
+                    {
+                        "question": "Pergunta normalizada?",
+                        "rows": [{"total_viagens": 42}],
+                        "failure": None,
+                    }
+                ]
+            },
+            "result-interpretation",
         )
         assert response["usageMetrics"]["total"]["calls"] == 1
         assert "question_classifier" in response["usageMetrics"]["components"]
@@ -336,7 +398,7 @@ def test_chat_includes_sqlite_failure_reason_in_response_and_logs(monkeypatch) -
             pass
 
         def run(self, _question: str, _history=()):
-            return SimpleNamespace(status="relevant", normalized_query=question)
+            return [SimpleNamespace(status="relevant", normalized_query=question)]
 
     class FakeRetrievalService:
         def __init__(self, **_kwargs) -> None:
@@ -379,6 +441,13 @@ def test_chat_includes_sqlite_failure_reason_in_response_and_logs(monkeypatch) -
                 error=sqlite_error,
             )
 
+    class FakeResultInterpreterService:
+        def __init__(self, **_kwargs) -> None:
+            pytest.fail("A result interpreter should not run when every question fails.")
+
+        def interpret(self, results):
+            pytest.fail("The result interpreter should not run when every question fails.")
+
     monkeypatch.setattr(
         "text_to_sql.api.chat.Settings",
         lambda: SimpleNamespace(
@@ -400,6 +469,10 @@ def test_chat_includes_sqlite_failure_reason_in_response_and_logs(monkeypatch) -
         "text_to_sql.chat_pipeline.SQLExecutionWithRetriesService",
         FakeSQLExecutionService,
     )
+    monkeypatch.setattr(
+        "text_to_sql.chat_pipeline.LLMResultInterpreterService",
+        FakeResultInterpreterService,
+    )
 
     status_code, response = _post_chat(question)
     assert status_code == 422
@@ -418,4 +491,5 @@ def test_chat_includes_sqlite_failure_reason_in_response_and_logs(monkeypatch) -
         "final_parameters": "{}",
         "row_count": 0,
         "rows": "[]",
+        "question": question,
     }

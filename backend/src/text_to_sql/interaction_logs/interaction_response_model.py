@@ -10,6 +10,7 @@ class InteractionEvidence(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     rank: int = Field(ge=1)
+    question: str | None = None
     source: str = Field(min_length=1)
     chunk_id: str = Field(min_length=1)
     score: float

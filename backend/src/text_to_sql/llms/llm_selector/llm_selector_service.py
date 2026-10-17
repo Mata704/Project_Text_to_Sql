@@ -12,6 +12,7 @@ from text_to_sql.llms.llm_selector.constants import (
 from text_to_sql.llms.llm_selector.llm_selector_model import (
     ConversationMessage,
     QuestionClassificationResult,
+    QuestionClassificationResults,
 )
 from text_to_sql.usage_metrics import UsageMetricsService
 
@@ -37,37 +38,38 @@ class LLMSelectorService:
         self,
         question: str,
         history: Sequence[ConversationMessage] = (),
-    ) -> QuestionClassificationResult:
+    ) -> list[QuestionClassificationResult]:
         question = question.strip()
         if not question:
             raise ValueError("The question cannot be empty.")
 
-        classification = self.classify_question(question, history)
+        classifications = self.classify_question(question, history)
         if self.interaction_logs is not None:
-            self.interaction_logs.record(
-                level="info",
-                component=COMPONENT_QUESTION_CLASSIFIER,
-                event="question_classified",
-                message="A pergunta foi classificada.",
-                details={
-                    "status": classification.status,
-                    "normalized_query": classification.normalized_query,
-                },
-            )
-            if classification.status == "ambiguous":
+            for classification in classifications:
                 self.interaction_logs.record(
-                    level="warning",
+                    level="info",
                     component=COMPONENT_QUESTION_CLASSIFIER,
-                    event="clarification_unresolved",
-                    message="A pergunta requer clarificação do utilizador.",
+                    event="question_classified",
+                    message="Uma pergunta foi classificada.",
+                    details={
+                        "status": classification.status,
+                        "normalized_query": classification.normalized_query,
+                    },
                 )
-        return classification
+                if classification.status == "ambiguous":
+                    self.interaction_logs.record(
+                        level="warning",
+                        component=COMPONENT_QUESTION_CLASSIFIER,
+                        event="clarification_unresolved",
+                        message="Uma pergunta requer clarificação do utilizador.",
+                    )
+        return classifications
 
     def classify_question(
         self,
         question: str,
         history: Sequence[ConversationMessage] = (),
-    ) -> QuestionClassificationResult:
+    ) -> list[QuestionClassificationResult]:
         sanitized_question = self._sanitize_user_content(question)
         messages = [
             _response_input_message(
@@ -83,17 +85,34 @@ class LLMSelectorService:
             _response_input_message(ConversationMessage(role="user", content=sanitized_question))
         )
 
-        return parse_structured_response(
+        result = parse_structured_response(
             self.client,
             model=self.model,
             instructions=CLASSIFICATION_INSTRUCTIONS,
             messages=messages,
-            response_model=QuestionClassificationResult,
+            response_model=QuestionClassificationResults,
             action="classify the question",
             result_name="question classification",
             usage_metrics=self.usage_metrics,
             usage_component=COMPONENT_QUESTION_CLASSIFIER,
         )
+        return self._deduplicate(result.classifications)
+
+    @staticmethod
+    def _deduplicate(
+        classifications: Sequence[QuestionClassificationResult],
+    ) -> list[QuestionClassificationResult]:
+        unique: list[QuestionClassificationResult] = []
+        seen: set[tuple[str, str]] = set()
+        for classification in classifications:
+            key = (
+                classification.status,
+                " ".join(classification.normalized_query.lower().split()),
+            )
+            if key not in seen:
+                seen.add(key)
+                unique.append(classification)
+        return unique
 
     def _sanitize_user_content(self, content: str) -> str:
         sanitized = PROMPT_INJECTION_TERMS_PATTERN.sub("", content)

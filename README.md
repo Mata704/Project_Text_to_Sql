@@ -32,6 +32,9 @@ executar uma query SQLite somente de leitura. Expõe uma API FastAPI em
 `{"question": "..."}`). Se a execução falhar, o backend
 tenta repará-la com uma LLM até ao limite de três execuções no total. Consulte
 [backend/README.md](./backend/README.md) para detalhes.
+Se a porta 8000 estiver ocupada, defina `TEXT_TO_SQL_PORT` para outra porta
+(por exemplo, `8001`) e configure o frontend com
+`API_BASE_URL=http://127.0.0.1:8001`.
 
 Testes e lint, a partir de `backend/`:
 

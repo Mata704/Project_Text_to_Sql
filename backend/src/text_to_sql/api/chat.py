@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from text_to_sql.api.constants import HISTORY_MESSAGES_LIMIT
-from text_to_sql.chat_pipeline import answer_relevant_question
+from text_to_sql.chat_pipeline import answer_relevant_questions
 from text_to_sql.config import Settings
 from text_to_sql.constants import COMPONENT_INTERACTION
 from text_to_sql.document_ingestion import DocumentIngestionConfig, DocumentIngestionService
@@ -55,48 +55,63 @@ def answer_chat(
     evidences: list[InteractionEvidence] = []
 
     try:
-        classification = LLMSelectorService(
+        classifications = LLMSelectorService(
             api_key=runtime.api_key,
             model=runtime.settings.openai_model,
             usage_metrics=usage_metrics,
             interaction_logs=interaction_logs,
         ).run(question, history[-HISTORY_MESSAGES_LIMIT:])
 
-        if classification.status == "irrelevant":
-            answer = classification.normalized_query
-            interaction_logs.record(
-                level="info",
-                component=COMPONENT_INTERACTION,
-                event="out_of_scope_answer",
-                message="Foi devolvida a resposta para uma pergunta fora do âmbito.",
+        ambiguous_classifications = [
+            classification
+            for classification in classifications
+            if classification.status == "ambiguous"
+        ]
+        if ambiguous_classifications:
+            # Adia todos os pedidos relevantes até as partes ambíguas serem esclarecidas.
+            answer = "\n".join(
+                clarification
+                for classification in ambiguous_classifications
+                if (clarification := classification.clarification_question)
             )
-        elif classification.status == "ambiguous":
-            # Só o classificador pode fazer perguntas ao utilizador.
-            answer = classification.clarification_question
             interaction_logs.record(
                 level="info",
                 component=COMPONENT_INTERACTION,
                 event="clarification_requested",
                 message="Foi pedida uma clarificação ao utilizador.",
+                details={"count": len(ambiguous_classifications)},
             )
         else:
-            outcome = answer_relevant_question(
-                question=question,
-                classification=classification,
-                settings=runtime.settings,
-                api_key=runtime.api_key,
-                retrieval_config=RetrievalConfig(
-                    embedding=runtime.ingestion_config.embedding,
-                    vector_store=runtime.ingestion_config.vector_store,
-                ),
-                usage_metrics=usage_metrics,
-                interaction_logs=interaction_logs,
-            )
-            evidences = outcome.evidences
-            if outcome.failure is None:
-                answer = outcome.answer
+            relevant_classifications = [
+                classification
+                for classification in classifications
+                if classification.status == "relevant"
+            ]
+            if not relevant_classifications:
+                answer = classifications[0].normalized_query
+                interaction_logs.record(
+                    level="info",
+                    component=COMPONENT_INTERACTION,
+                    event="out_of_scope_answer",
+                    message="Foi devolvida a resposta para uma pergunta fora do âmbito.",
+                )
             else:
-                error_message = f"{outcome.failure} Reformule a pergunta."
+                outcome = answer_relevant_questions(
+                    classifications=relevant_classifications,
+                    settings=runtime.settings,
+                    api_key=runtime.api_key,
+                    retrieval_config=RetrievalConfig(
+                        embedding=runtime.ingestion_config.embedding,
+                        vector_store=runtime.ingestion_config.vector_store,
+                    ),
+                    usage_metrics=usage_metrics,
+                    interaction_logs=interaction_logs,
+                )
+                evidences = outcome.evidences
+                if outcome.failure is None:
+                    answer = outcome.answer
+                else:
+                    error_message = f"{outcome.failure} Reformule a pergunta."
     except (ValueError, TextToSQLError) as error:
         error_message = str(error)
         interaction_logs.record(

@@ -36,3 +36,9 @@ class QuestionClassificationResult(BaseModel):
                 raise ValueError("Ambiguous questions require a clarification question.")
             self.clarification_question = self.clarification_question.strip()
         return self
+
+
+class QuestionClassificationResults(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    classifications: list[QuestionClassificationResult] = Field(min_length=1)

@@ -10,8 +10,15 @@ from text_to_sql.llms.llm_selector import (
     ConversationMessage,
     LLMSelectorService,
     QuestionClassificationResult,
+    QuestionClassificationResults,
 )
 from text_to_sql.usage_metrics import UsageMetricsService
+
+
+def _classification_response(
+    *classifications: QuestionClassificationResult,
+) -> QuestionClassificationResults:
+    return QuestionClassificationResults(classifications=list(classifications))
 
 
 def test_first_stage_result_requires_clarification_only_for_ambiguous() -> None:
@@ -42,6 +49,8 @@ def test_first_stage_result_requires_clarification_only_for_ambiguous() -> None:
         status="irrelevant", normalized_query="fora", clarification_question="Quer?"
     )
     assert dropped.clarification_question is None
+    with pytest.raises(ValidationError, match="at least 1 item"):
+        QuestionClassificationResults(classifications=[])
 
 
 def test_classifier_sends_history_and_current_question_without_database_schema() -> None:
@@ -49,7 +58,7 @@ def test_classifier_sends_history_and_current_question_without_database_schema()
         status="relevant",
         normalized_query="Qual foi o atraso do comboio IC523 em 2026-10-05?",
     )
-    response = Mock(output_parsed=parsed_result)
+    response = Mock(output_parsed=_classification_response(parsed_result))
     mock_client = Mock()
     mock_client.responses.parse.return_value = response
     history = [
@@ -67,10 +76,10 @@ def test_classifier_sends_history_and_current_question_without_database_schema()
             history=history,
         )
 
-    assert result == parsed_result
+    assert result == [parsed_result]
     call = mock_client.responses.parse.call_args.kwargs
     assert call["model"] == "test-model"
-    assert call["text_format"] is QuestionClassificationResult
+    assert call["text_format"] is QuestionClassificationResults
     assert "Não consultas bases de dados" in call["instructions"]
     assert "Nunca peças confirmação" in call["instructions"]
     assert "Perguntas gerais sobre o comboio com maior ou menor atraso" in call["instructions"]
@@ -93,7 +102,7 @@ def test_classifier_records_response_usage_in_the_shared_session() -> None:
     )
     mock_client = Mock()
     mock_client.responses.parse.return_value = Mock(
-        output_parsed=parsed_result,
+        output_parsed=_classification_response(parsed_result),
         model="gpt-4.1-mini",
         usage=SimpleNamespace(input_tokens=30, output_tokens=5, total_tokens=35),
     )
@@ -113,13 +122,45 @@ def test_classifier_records_response_usage_in_the_shared_session() -> None:
     assert report["total"]["calls"] == 1
 
 
+def test_classifier_returns_each_distinct_question_without_context_generated_items() -> None:
+    parsed_results = _classification_response(
+        QuestionClassificationResult(
+            status="relevant",
+            normalized_query="Quantas viagens foram realizadas?",
+        ),
+        QuestionClassificationResult(
+            status="relevant",
+            normalized_query="Qual o atraso médio de chegada?",
+        ),
+    )
+    mock_client = Mock()
+    mock_client.responses.parse.return_value = Mock(output_parsed=parsed_results)
+
+    with patch("text_to_sql.llms.common.OpenAI", return_value=mock_client):
+        selector = LLMSelectorService(api_key="test-key", model="test-model")
+        results = selector.classify_question(
+            "Quantas viagens foram realizadas e qual o atraso médio de chegada?",
+            history=[ConversationMessage(role="user", content="Outra pergunta anterior?")],
+        )
+
+    assert [result.normalized_query for result in results] == [
+        "Quantas viagens foram realizadas?",
+        "Qual o atraso médio de chegada?",
+    ]
+    instructions = mock_client.responses.parse.call_args.kwargs["instructions"]
+    assert "nunca o uses para inventar ou acrescentar perguntas" in instructions
+    assert "recupera todos os pedidos distintos ainda pendentes" in instructions
+
+
 def test_classifier_removes_prompt_injection_terms_from_question_and_history() -> None:
     parsed_result = QuestionClassificationResult(
         status="relevant",
         normalized_query="Qual foi o atraso do comboio IC523?",
     )
     mock_client = Mock()
-    mock_client.responses.parse.return_value = Mock(output_parsed=parsed_result)
+    mock_client.responses.parse.return_value = Mock(
+        output_parsed=_classification_response(parsed_result)
+    )
     history = [
         ConversationMessage(
             role="user",
@@ -152,7 +193,9 @@ def test_classifier_removes_portuguese_prompt_injection_terms() -> None:
         normalized_query="Quantas viagens foram realizadas?",
     )
     mock_client = Mock()
-    mock_client.responses.parse.return_value = Mock(output_parsed=parsed_result)
+    mock_client.responses.parse.return_value = Mock(
+        output_parsed=_classification_response(parsed_result)
+    )
 
     with patch(
         "text_to_sql.llms.common.OpenAI",
@@ -205,7 +248,9 @@ def test_service_returns_clarification_without_requesting_another_input(
         clarification_question="De que comboio e data?",
     )
     mock_client = Mock()
-    mock_client.responses.parse.return_value = Mock(output_parsed=ambiguous)
+    mock_client.responses.parse.return_value = Mock(
+        output_parsed=_classification_response(ambiguous)
+    )
     with patch(
         "text_to_sql.llms.common.OpenAI",
         return_value=mock_client,
@@ -223,7 +268,7 @@ def test_service_returns_clarification_without_requesting_another_input(
 
     result = service.run("Qual foi o atraso?")
 
-    assert result == ambiguous
+    assert result == [ambiguous]
     assert [entry.event for entry in interaction_logs.entries] == [
         "question_classified",
         "clarification_unresolved",

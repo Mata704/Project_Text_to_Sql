@@ -1,4 +1,12 @@
+from typing import TypedDict
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class QuestionResult(TypedDict):
+    question: str
+    rows: list[dict[str, object]]
+    failure: str | None
 
 
 class ResultInterpretation(BaseModel):

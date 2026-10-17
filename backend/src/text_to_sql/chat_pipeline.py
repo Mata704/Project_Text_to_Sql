@@ -1,4 +1,5 @@
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from text_to_sql.config import Settings
@@ -9,10 +10,10 @@ from text_to_sql.constants import (
     LOG_RESULT_ROWS_LIMIT,
     UNKNOWN_SOURCE,
 )
-from text_to_sql.errors import LLMError
+from text_to_sql.errors import TextToSQLError
 from text_to_sql.interaction_logs import InteractionEvidence, InteractionLogService
 from text_to_sql.llms import LLMResultInterpreterService, LLMSQLGeneratorService
-from text_to_sql.llms.common import OpenAIRequestError
+from text_to_sql.llms.llm_result_interpreter import QuestionResult
 from text_to_sql.llms.llm_selector.llm_selector_model import QuestionClassificationResult
 from text_to_sql.retrieval import RetrievalConfig, RetrievalService
 from text_to_sql.sql_execution import SQLExecutionWithRetriesService
@@ -27,73 +28,119 @@ def _as_json(value: object) -> str:
 @dataclass
 class PipelineOutcome:
     answer: str | None = None
-    # Quando preenchido, o fluxo falhou após os retries e deve voltar à classificação.
     failure: str | None = None
     evidences: list[InteractionEvidence] = field(default_factory=list)
 
 
-def answer_relevant_question(
+def answer_relevant_questions(
     *,
-    question: str,
-    classification: QuestionClassificationResult,
+    classifications: Sequence[QuestionClassificationResult],
     settings: Settings,
     api_key: str,
     retrieval_config: RetrievalConfig,
     usage_metrics: UsageMetricsService,
     interaction_logs: InteractionLogService,
 ) -> PipelineOutcome:
+    if not classifications:
+        raise ValueError("At least one relevant question is required.")
+
+    question_results: list[QuestionResult] = []
+    evidences: list[InteractionEvidence] = []
+
+    for classification in classifications:
+        result, question_evidence = _process_relevant_question(
+            classification=classification,
+            settings=settings,
+            api_key=api_key,
+            retrieval_config=retrieval_config,
+            usage_metrics=usage_metrics,
+            interaction_logs=interaction_logs,
+            evidence_rank_start=len(evidences) + 1,
+        )
+        question_results.append(result)
+        evidences.extend(question_evidence)
+
+    if all(result["failure"] is not None for result in question_results):
+        failures = [result["failure"] for result in question_results if result["failure"]]
+        return PipelineOutcome(
+            failure=" ".join(failures),
+            evidences=evidences,
+        )
+
+    answer = LLMResultInterpreterService(
+        api_key=api_key,
+        model=settings.openai_model,
+        usage_metrics=usage_metrics,
+    ).interpret(question_results)
+    return PipelineOutcome(answer=answer, evidences=evidences)
+
+
+def _process_relevant_question(
+    *,
+    classification: QuestionClassificationResult,
+    settings: Settings,
+    api_key: str,
+    retrieval_config: RetrievalConfig,
+    usage_metrics: UsageMetricsService,
+    interaction_logs: InteractionLogService,
+    evidence_rank_start: int,
+) -> tuple[QuestionResult, list[InteractionEvidence]]:
+    question = classification.normalized_query
     interaction_logs.record(
         level="info",
         component=COMPONENT_RETRIEVAL,
         event="retrieval_started",
         message="A pesquisa de evidências começou.",
-        details={"top_k": retrieval_config.top_k},
+        details={"top_k": retrieval_config.top_k, "question": question},
     )
-    retrieved_chunks = RetrievalService(
-        api_key=api_key,
-        config=retrieval_config,
-        usage_metrics=usage_metrics,
-    ).retrieve(classification.normalized_query)
+    try:
+        retrieved_chunks = RetrievalService(
+            api_key=api_key,
+            config=retrieval_config,
+            usage_metrics=usage_metrics,
+        ).retrieve(question)
+    except TextToSQLError as error:
+        _record_question_failure(interaction_logs, question, error)
+        return {"question": question, "rows": [], "failure": str(error)}, []
     interaction_logs.record(
         level="info",
         component=COMPONENT_RETRIEVAL,
         event="retrieval_completed",
         message="A pesquisa de evidências terminou.",
-        details={"count": len(retrieved_chunks)},
+        details={"count": len(retrieved_chunks), "question": question},
     )
 
-    sqlite_service = SQLiteService()
+    citations_by_chunk: dict[tuple[str, str], list[str]] = {}
     try:
+        sqlite_service = SQLiteService()
         generation = LLMSQLGeneratorService(
             api_key=api_key,
             model=settings.openai_model,
             sqlite_service=sqlite_service,
             usage_metrics=usage_metrics,
             interaction_logs=interaction_logs,
-        ).generate(classification.normalized_query, retrieved_chunks)
-    except OpenAIRequestError:
-        raise
-    except LLMError as error:
+        ).generate(question, retrieved_chunks)
+    except TextToSQLError as error:
         interaction_logs.record(
             level="warning",
             component=COMPONENT_SQL_GENERATOR,
             event="generation_failed",
             message="A geração da query falhou após as tentativas permitidas.",
-            details={"error": str(error)},
+            details={"error": str(error), "question": question},
         )
-        return PipelineOutcome(failure=str(error))
+        return {"question": question, "rows": [], "failure": str(error)}, []
 
-    citations_by_chunk: dict[tuple[str, str], list[str]] = {}
     for citation in generation.citations:
         citations_by_chunk.setdefault((citation.source, citation.chunk_id), []).append(
             citation.quote
         )
     evidences = []
-    for rank, result in enumerate(retrieved_chunks, start=1):
+    for rank, result in enumerate(retrieved_chunks, start=evidence_rank_start):
         source = str(result.chunk.metadata.get("source", UNKNOWN_SOURCE))
         evidences.append(
             InteractionEvidence(
                 rank=rank,
+                question=question,
                 source=source,
                 chunk_id=result.chunk.chunk_id,
                 score=result.score,
@@ -103,16 +150,15 @@ def answer_relevant_question(
         )
 
     if generation.sql is None:
+        failure = generation.explanation or "Não foi possível gerar uma query."
         interaction_logs.record(
             level="warning",
             component=COMPONENT_SQL_GENERATOR,
             event="question_not_answerable",
             message="Não foi possível gerar uma query com as evidências disponíveis.",
+            details={"question": question, "failure": failure},
         )
-        return PipelineOutcome(
-            failure=generation.explanation or "Não foi possível gerar uma query.",
-            evidences=evidences,
-        )
+        return {"question": question, "rows": [], "failure": failure}, evidences
 
     parameters = {parameter.name: parameter.value for parameter in generation.parameters}
     interaction_logs.record(
@@ -120,19 +166,33 @@ def answer_relevant_question(
         component=COMPONENT_SQL_EXECUTION,
         event="execution_started",
         message="A execução da query SELECT começou.",
-        details={"sql": generation.sql, "parameters": _as_json(parameters)},
+        details={
+            "sql": generation.sql,
+            "parameters": _as_json(parameters),
+            "question": question,
+        },
     )
-    execution = SQLExecutionWithRetriesService(
-        api_key=api_key,
-        model=settings.openai_model,
-        sqlite_service=sqlite_service,
-        usage_metrics=usage_metrics,
-    ).execute(
-        question=classification.normalized_query,
-        sql=generation.sql,
-        parameters=parameters,
-        evidence=retrieved_chunks,
-    )
+    try:
+        execution = SQLExecutionWithRetriesService(
+            api_key=api_key,
+            model=settings.openai_model,
+            sqlite_service=sqlite_service,
+            usage_metrics=usage_metrics,
+        ).execute(
+            question=question,
+            sql=generation.sql,
+            parameters=parameters,
+            evidence=retrieved_chunks,
+        )
+    except TextToSQLError as error:
+        _record_question_failure(
+            interaction_logs,
+            question,
+            error,
+            component=COMPONENT_SQL_EXECUTION,
+        )
+        return {"question": question, "rows": [], "failure": str(error)}, evidences
+
     interaction_logs.record(
         level="info" if execution.succeeded else "error",
         component=COMPONENT_SQL_EXECUTION,
@@ -152,20 +212,30 @@ def answer_relevant_question(
             "final_parameters": _as_json(execution.parameters),
             "row_count": len(execution.rows),
             "rows": _as_json(execution.rows[:LOG_RESULT_ROWS_LIMIT]),
+            "question": question,
         },
     )
     if not execution.succeeded:
-        return PipelineOutcome(
-            failure=(
-                f"Não foi possível executar a query após {execution.attempts} tentativas. "
-                f"Erro: {execution.error or 'erro SQL não especificado'}."
-            ),
-            evidences=evidences,
+        failure = (
+            f"Não foi possível executar a query após {execution.attempts} tentativas. "
+            f"Erro: {execution.error or 'erro SQL não especificado'}."
         )
+        return {"question": question, "rows": [], "failure": failure}, evidences
 
-    answer = LLMResultInterpreterService(
-        api_key=api_key,
-        model=settings.openai_model,
-        usage_metrics=usage_metrics,
-    ).interpret(question, execution.rows)
-    return PipelineOutcome(answer=answer, evidences=evidences)
+    return {"question": question, "rows": execution.rows, "failure": None}, evidences
+
+
+def _record_question_failure(
+    interaction_logs: InteractionLogService,
+    question: str,
+    error: TextToSQLError,
+    *,
+    component: str = COMPONENT_RETRIEVAL,
+) -> None:
+    interaction_logs.record(
+        level="error",
+        component=component,
+        event="question_processing_failed",
+        message="Não foi possível processar esta pergunta.",
+        details={"question": question, "error": str(error)},
+    )
