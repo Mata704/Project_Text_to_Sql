@@ -274,4 +274,6 @@ def test_service_returns_clarification_without_requesting_another_input(
         "clarification_unresolved",
     ]
     assert interaction_logs.entries[0].details["status"] == "ambiguous"
+    assert interaction_logs.entries[0].details["question"] == "Qual foi o atraso?"
+    assert interaction_logs.entries[0].details["clarification_question"] == "De que comboio e data?"
     assert mock_client.responses.parse.call_count == 1

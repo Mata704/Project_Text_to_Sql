@@ -4,6 +4,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+type InteractionLogValue = (
+    str | int | float | bool | None | list[InteractionLogValue] | dict[str, InteractionLogValue]
+)
+
 
 class InteractionLogEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -13,7 +17,7 @@ class InteractionLogEntry(BaseModel):
     component: str = Field(min_length=1)
     event: str = Field(min_length=1)
     message: str = Field(min_length=1)
-    details: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    details: dict[str, InteractionLogValue] = Field(default_factory=dict)
 
 
 class InteractionLogService:
@@ -34,7 +38,7 @@ class InteractionLogService:
         component: str,
         event: str,
         message: str,
-        details: dict[str, str | int | float | bool | None] | None = None,
+        details: dict[str, InteractionLogValue] | None = None,
     ) -> InteractionLogEntry:
         entry = InteractionLogEntry(
             timestamp=datetime.now(UTC),

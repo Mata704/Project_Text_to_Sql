@@ -1,4 +1,5 @@
 import hashlib
+import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,8 @@ from text_to_sql.chunking.constants import (
     TABLE_SEPARATOR_PATTERN,
     TOKENIZER_ENCODING,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -39,8 +42,13 @@ class ChunkingService:
         if not path.is_dir():
             raise NotADirectoryError(f"Documentation directory does not exist: {path}")
 
+        markdown_paths = sorted(path.rglob("*.md"))
+        if not markdown_paths:
+            logger.warning("No Markdown files found in %s.", path)
+            return []
+
         chunks: list[DocumentChunk] = []
-        for document_path in sorted(path.rglob("*.md")):
+        for document_path in markdown_paths:
             relative_source = document_path.relative_to(path).as_posix()
             chunks.extend(
                 self.chunk_markdown(
@@ -48,6 +56,12 @@ class ChunkingService:
                     content=document_path.read_text(encoding="utf-8"),
                 )
             )
+        logger.info(
+            "Processed %d Markdown files from %s; produced %d chunks.",
+            len(markdown_paths),
+            path,
+            len(chunks),
+        )
         return chunks
 
     def chunk_markdown(self, source: str, content: str) -> list[DocumentChunk]:
@@ -91,6 +105,13 @@ class ChunkingService:
                     token_count=len(self._tokenizer.encode(chunk_content)),
                 )
             )
+        logger.debug(
+            "Processed Markdown file %s (%d characters); produced %d chunks and %d tokens.",
+            source,
+            len(content),
+            len(chunks),
+            sum(chunk.token_count for chunk in chunks),
+        )
         return chunks
 
     def _document_title(self, source: str, content: str) -> str:

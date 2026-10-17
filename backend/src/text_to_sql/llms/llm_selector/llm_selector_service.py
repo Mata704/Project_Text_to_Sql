@@ -52,8 +52,10 @@ class LLMSelectorService:
                     event="question_classified",
                     message="Uma pergunta foi classificada.",
                     details={
+                        "question": question,
                         "status": classification.status,
                         "normalized_query": classification.normalized_query,
+                        "clarification_question": classification.clarification_question,
                     },
                 )
                 if classification.status == "ambiguous":

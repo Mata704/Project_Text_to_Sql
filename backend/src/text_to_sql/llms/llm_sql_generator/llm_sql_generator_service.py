@@ -59,7 +59,7 @@ class LLMSQLGeneratorService:
             f"{self._format_evidence(evidence)}"
         )
         retry_feedback: str | None = None
-        for _attempt in range(MAX_SQL_GENERATION_ATTEMPTS):
+        for attempt in range(1, MAX_SQL_GENERATION_ATTEMPTS + 1):
             response_input = base_input
             if retry_feedback is not None:
                 response_input += (
@@ -84,10 +84,12 @@ class LLMSQLGeneratorService:
                 raise
             except LLMError as error:
                 retry_feedback = str(error)
+                self._record_rejected_attempt(attempt, retry_feedback, question)
                 continue
 
             if not result.answerable or result.sql is None:
                 retry_feedback = result.explanation or "não foi devolvida nenhuma query."
+                self._record_rejected_attempt(attempt, retry_feedback, question)
                 continue
             try:
                 result = self._validate_citations(result, evidence)
@@ -96,6 +98,7 @@ class LLMSQLGeneratorService:
                 self.sqlite_service.validate_select(result.sql, parameters)
             except (LLMError, SQLiteDatabaseError) as error:
                 retry_feedback = f"Query rejeitada. Motivo: {error}"
+                self._record_rejected_attempt(attempt, retry_feedback, question)
                 continue
 
             if self.interaction_logs is not None:
@@ -104,6 +107,16 @@ class LLMSQLGeneratorService:
                     component=COMPONENT_SQL_GENERATOR,
                     event="select_validated",
                     message="A query SELECT foi validada.",
+                    details={
+                        "attempt": attempt,
+                        "attempt_limit": MAX_SQL_GENERATION_ATTEMPTS,
+                        "question": question,
+                        "sql": result.sql,
+                        "parameter_names": [parameter.name for parameter in result.parameters],
+                        "citation_sources": sorted(
+                            {citation.source for citation in result.citations}
+                        ),
+                    },
                 )
             return result
 
@@ -112,6 +125,26 @@ class LLMSQLGeneratorService:
             f"Após {MAX_SQL_GENERATION_ATTEMPTS} tentativas. "
             f"Último motivo: {retry_feedback or 'o modelo não gerou uma query válida.'}"
         )
+
+    def _record_rejected_attempt(self, attempt: int, reason: str, question: str) -> None:
+        if self.interaction_logs is not None:
+            self.interaction_logs.record(
+                level="debug",
+                component=COMPONENT_SQL_GENERATOR,
+                event="generation_attempt_rejected",
+                message=(
+                    "Uma tentativa de geração SQL foi rejeitada; será tentada novamente."
+                    if attempt < MAX_SQL_GENERATION_ATTEMPTS
+                    else "A última tentativa de geração SQL foi rejeitada."
+                ),
+                details={
+                    "attempt": attempt,
+                    "attempt_limit": MAX_SQL_GENERATION_ATTEMPTS,
+                    "will_retry": attempt < MAX_SQL_GENERATION_ATTEMPTS,
+                    "question": question,
+                    "reason": reason,
+                },
+            )
 
     def _validate_delay_record_type(self, question: str, sql: str) -> None:
         lowered_sql = sql.lower()

@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import pytest
@@ -132,6 +133,47 @@ def test_chunk_file_and_directory_read_markdown(tmp_path: Path) -> None:
         "overview.md",
         "schema/viagens.md",
     ]
+
+
+def test_chunk_directory_logs_aggregate_and_document_details(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "overview.md").write_text("# Geral\n\nDocumento geral.", encoding="utf-8")
+    caplog.set_level(logging.DEBUG, logger="text_to_sql.chunking.chunking_service")
+
+    chunks = ChunkingService().chunk_directory(docs_dir)
+
+    assert chunks
+    assert any(
+        record.levelno == logging.INFO
+        and record.getMessage()
+        == f"Processed 1 Markdown files from {docs_dir}; produced {len(chunks)} chunks."
+        for record in caplog.records
+    )
+    assert any(
+        record.levelno == logging.DEBUG
+        and "overview.md" in record.getMessage()
+        and "characters" in record.getMessage()
+        and "tokens" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_chunk_directory_warns_when_no_markdown_files_are_found(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING, logger="text_to_sql.chunking.chunking_service")
+
+    assert ChunkingService().chunk_directory(tmp_path) == []
+    assert any(
+        record.levelno == logging.WARNING
+        and record.getMessage() == f"No Markdown files found in {tmp_path}."
+        for record in caplog.records
+    )
 
 
 def test_backend_documentation_chunks_within_configured_size() -> None:

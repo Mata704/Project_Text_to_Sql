@@ -87,6 +87,14 @@ def test_sql_generator_returns_structured_sql_and_validates_citation() -> None:
         {},
     )
     assert interaction_logs.entries[-1].event == "select_validated"
+    assert interaction_logs.entries[-1].details == {
+        "attempt": 1,
+        "attempt_limit": 3,
+        "question": "Quantas viagens existem?",
+        "sql": "SELECT COUNT(*) FROM viagens;",
+        "parameter_names": [],
+        "citation_sources": ["01-schema.md"],
+    }
 
 
 def test_sql_generator_uses_same_failure_when_there_is_no_evidence() -> None:
@@ -251,7 +259,21 @@ def test_sql_generator_retries_unsafe_query_and_returns_safe_replacement() -> No
         "SELECT COUNT(*) FROM viagens;",
         {},
     )
+    rejected_attempt = interaction_logs.entries[-2]
+    assert rejected_attempt.event == "generation_attempt_rejected"
+    assert rejected_attempt.level == "debug"
+    assert rejected_attempt.details["attempt"] == 1
+    assert rejected_attempt.details["will_retry"] is True
+    assert rejected_attempt.details["reason"]
     assert interaction_logs.entries[-1].event == "select_validated"
+    assert interaction_logs.entries[-1].details == {
+        "attempt": 2,
+        "attempt_limit": 3,
+        "question": "Quantas viagens existem?",
+        "sql": "SELECT COUNT(*) FROM viagens;",
+        "parameter_names": [],
+        "citation_sources": ["01-schema.md"],
+    }
 
 
 def test_sql_generator_retries_unanswerable_response_and_returns_safe_query() -> None:

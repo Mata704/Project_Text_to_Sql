@@ -91,7 +91,11 @@ def _process_relevant_question(
         component=COMPONENT_RETRIEVAL,
         event="retrieval_started",
         message="A pesquisa de evidências começou.",
-        details={"top_k": retrieval_config.top_k, "question": question},
+        details={
+            "top_k": retrieval_config.top_k,
+            "minimum_similarity_score": retrieval_config.minimum_similarity_score,
+            "question": question,
+        },
     )
     try:
         retrieved_chunks = RetrievalService(
@@ -107,7 +111,19 @@ def _process_relevant_question(
         component=COMPONENT_RETRIEVAL,
         event="retrieval_completed",
         message="A pesquisa de evidências terminou.",
-        details={"count": len(retrieved_chunks), "question": question},
+        details={
+            "count": len(retrieved_chunks),
+            "question": question,
+            "results": [
+                {
+                    "rank": rank,
+                    "source": str(result.chunk.metadata.get("source", UNKNOWN_SOURCE)),
+                    "chunk_id": result.chunk.chunk_id,
+                    "score": round(result.score, 4),
+                }
+                for rank, result in enumerate(retrieved_chunks, start=1)
+            ],
+        },
     )
 
     citations_by_chunk: dict[tuple[str, str], list[str]] = {}

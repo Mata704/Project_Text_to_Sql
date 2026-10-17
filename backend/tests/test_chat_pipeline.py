@@ -75,6 +75,7 @@ def test_pipeline_interprets_all_results_once_after_individual_sql_processing(
         FakeResultInterpreterService,
     )
 
+    interaction_logs = InteractionLogService()
     outcome = answer_relevant_questions(
         classifications=[
             QuestionClassificationResult(
@@ -90,7 +91,7 @@ def test_pipeline_interprets_all_results_once_after_individual_sql_processing(
         api_key="test-key",
         retrieval_config=RetrievalConfig(),
         usage_metrics=UsageMetricsService(),
-        interaction_logs=InteractionLogService(),
+        interaction_logs=interaction_logs,
     )
 
     assert retrieved_questions == [
@@ -114,3 +115,14 @@ def test_pipeline_interprets_all_results_once_after_individual_sql_processing(
     ]
     assert outcome.answer == "42 viagens; o atraso médio não foi possível calcular."
     assert [evidence.rank for evidence in outcome.evidences] == [1]
+    retrieval_log = next(
+        entry for entry in interaction_logs.entries if entry.event == "retrieval_completed"
+    )
+    assert retrieval_log.details["results"] == [
+        {
+            "rank": 1,
+            "source": "schema.md",
+            "chunk_id": "chunk-1",
+            "score": 0.9,
+        }
+    ]
